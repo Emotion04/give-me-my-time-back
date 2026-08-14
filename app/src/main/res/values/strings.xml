@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">还我时间</string>
+    <string name="accessibility_service_label">TimeC 硬拦截增强</string>
+    <string name="notification_channel_monitor">专注守护</string>
+    <string name="notification_channel_warning">温和提醒</string>
+</resources>

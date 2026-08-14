@@ -1,0 +1,23 @@
+# Gradle / build
+.gradle/
+build/
+app/build/
+.kotlin/
+
+# Local SDK path (machine specific)
+local.properties
+
+# Offline gradle cache copied for sandbox build (huge)
+.gradle-home/
+
+# IDE
+.idea/
+*.iml
+.vscode/
+
+# Temp
+.wtest/
+.tmpjar/
+
+# Built APKs (publish via GitHub Releases instead)
+*.apk
