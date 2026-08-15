@@ -17,9 +17,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Slider
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
@@ -74,10 +72,7 @@ fun SettingsScreen(viewModel: AppViewModel, modifier: Modifier = Modifier) {
             )
         }
 
-        item { SectionHeader("限制模式") }
-        item {
-            ModeSelector(settings.mode, viewModel::setMode)
-        }
+        item { SectionHeader("透支等待") }
         item {
             Card {
                 Column(Modifier.padding(16.dp)) {
@@ -141,32 +136,6 @@ private fun SectionHeader(text: String) {
         color = MaterialTheme.colorScheme.primary,
         modifier = Modifier.padding(top = 4.dp)
     )
-}
-
-@Composable
-private fun ModeSelector(current: Int, onSelect: (Int) -> Unit) {
-    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        ModeCard("正常模式", "到时间后延长一分钟，简单直接", 0, current == 0) { onSelect(0) }
-        ModeCard("时间银行", "支持透支：倍率 + 冷却 + 递增代价，更灵活", 1, current == 1) { onSelect(1) }
-    }
-}
-
-@Composable
-private fun ModeCard(title: String, desc: String, mode: Int, selected: Boolean, onClick: () -> Unit) {
-    Card(
-        modifier = Modifier.fillMaxWidth().clickable(onClick = onClick),
-        colors = CardDefaults.cardColors(
-            containerColor = if (selected) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surface
-        )
-    ) {
-        Row(Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
-            RadioButton(selected = selected, onClick = onClick)
-            Column(Modifier.padding(start = 8.dp)) {
-                Text(title, style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.Bold)
-                Text(desc, style = MaterialTheme.typography.bodyMedium)
-            }
-        }
-    }
 }
 
 @Composable

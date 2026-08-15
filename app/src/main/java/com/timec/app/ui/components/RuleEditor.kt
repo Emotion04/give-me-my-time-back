@@ -7,6 +7,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.KeyboardOptions
@@ -16,6 +17,7 @@ import androidx.compose.material3.Card
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -47,6 +49,13 @@ fun RuleEditor(
                 .padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
+            Card {
+                Column(Modifier.padding(16.dp)) {
+                    Text("限制模式", style = MaterialTheme.typography.titleMedium)
+                    ModeRow("正常模式：到点延长一分钟", rule.mode == 0) { rule = rule.copy(mode = 0) }
+                    ModeRow("时间银行：支持透支", rule.mode == 1) { rule = rule.copy(mode = 1) }
+                }
+            }
             Card {
                 Column(Modifier.padding(16.dp)) {
                     Text("限额", style = MaterialTheme.typography.titleMedium)
@@ -92,6 +101,17 @@ fun RuleEditor(
                 }
             }
         }
+    }
+}
+
+@Composable
+private fun ModeRow(title: String, selected: Boolean, onClick: () -> Unit) {
+    Row(
+        modifier = Modifier.fillMaxWidth().clickable(onClick = onClick).padding(vertical = 4.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        RadioButton(selected = selected, onClick = onClick)
+        Text(title, modifier = Modifier.padding(start = 4.dp), style = MaterialTheme.typography.bodyLarge)
     }
 }
 

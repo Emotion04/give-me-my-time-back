@@ -15,22 +15,22 @@ class SettingsRepository(private val context: Context) {
     private object Keys {
         val enabled = booleanPreferencesKey("enabled")
         val themeIndex = intPreferencesKey("theme_index")
-        val mode = intPreferencesKey("mode")
         val overdraftDelaySeconds = intPreferencesKey("overdraft_delay_seconds")
         val defaultRule = stringPreferencesKey("default_rule")
         val appRules = stringPreferencesKey("app_rules")
         val templates = stringPreferencesKey("templates")
+        val appTemplateNames = stringPreferencesKey("app_template_names")
     }
 
     val settings: Flow<AppSettings> = context.settingsDataStore.data.map { p ->
         AppSettings(
             enabled = p[Keys.enabled] ?: true,
             themeIndex = p[Keys.themeIndex] ?: 0,
-            mode = p[Keys.mode] ?: 1,
             overdraftDelaySeconds = p[Keys.overdraftDelaySeconds] ?: 0,
             defaultRule = p[Keys.defaultRule]?.let(::appRuleFromJson) ?: AppRule(),
             appRules = p[Keys.appRules]?.let(::ruleMapFromJson) ?: emptyMap(),
-            templates = p[Keys.templates]?.let(::ruleMapFromJson) ?: emptyMap()
+            templates = p[Keys.templates]?.let(::ruleMapFromJson) ?: emptyMap(),
+            appTemplateNames = p[Keys.appTemplateNames]?.let(::stringMapFromJson) ?: emptyMap()
         )
     }
 
@@ -42,10 +42,6 @@ class SettingsRepository(private val context: Context) {
         context.settingsDataStore.edit { it[Keys.themeIndex] = value.coerceIn(0, 100) }
     }
 
-    suspend fun setMode(value: Int) {
-        context.settingsDataStore.edit { it[Keys.mode] = value.coerceIn(0, 1) }
-    }
-
     suspend fun setOverdraftDelaySeconds(value: Int) {
         context.settingsDataStore.edit { it[Keys.overdraftDelaySeconds] = value.coerceIn(0, 300) }
     }
@@ -55,18 +51,31 @@ class SettingsRepository(private val context: Context) {
     }
 
     suspend fun addApp(packageName: String, rule: AppRule) {
-        context.settingsDataStore.edit { p ->
-            val cur = p[Keys.appRules]?.let(::ruleMapFromJson) ?: emptyMap()
-            p[Keys.appRules] = ruleMapToJson(cur + (packageName to rule))
-        }
+        addApps(setOf(packageName), rule, null)
     }
 
-    suspend fun addApps(packageNames: Set<String>, rule: AppRule) {
+    suspend fun addApps(packageNames: Set<String>, rule: AppRule, templateName: String? = null) {
         context.settingsDataStore.edit { p ->
             val cur = p[Keys.appRules]?.let(::ruleMapFromJson) ?: emptyMap()
             val next = cur.toMutableMap()
             packageNames.forEach { next[it] = rule }
             p[Keys.appRules] = ruleMapToJson(next)
+
+            val tcur = p[Keys.appTemplateNames]?.let(::stringMapFromJson) ?: emptyMap()
+            val tnext = tcur.toMutableMap()
+            packageNames.forEach { pkg ->
+                if (templateName != null) tnext[pkg] = templateName else tnext.remove(pkg)
+            }
+            p[Keys.appTemplateNames] = stringMapToJson(tnext)
+        }
+    }
+
+    suspend fun updateAppRule(packageName: String, rule: AppRule) {
+        context.settingsDataStore.edit { p ->
+            val cur = p[Keys.appRules]?.let(::ruleMapFromJson) ?: emptyMap()
+            p[Keys.appRules] = ruleMapToJson(cur + (packageName to rule))
+            val tcur = p[Keys.appTemplateNames]?.let(::stringMapFromJson) ?: emptyMap()
+            p[Keys.appTemplateNames] = stringMapToJson(tcur - packageName)
         }
     }
 
@@ -74,6 +83,8 @@ class SettingsRepository(private val context: Context) {
         context.settingsDataStore.edit { p ->
             val cur = p[Keys.appRules]?.let(::ruleMapFromJson) ?: emptyMap()
             p[Keys.appRules] = ruleMapToJson(cur - packageName)
+            val tcur = p[Keys.appTemplateNames]?.let(::stringMapFromJson) ?: emptyMap()
+            p[Keys.appTemplateNames] = stringMapToJson(tcur - packageName)
         }
     }
 
@@ -88,6 +99,8 @@ class SettingsRepository(private val context: Context) {
         context.settingsDataStore.edit { p ->
             val cur = p[Keys.templates]?.let(::ruleMapFromJson) ?: emptyMap()
             p[Keys.templates] = ruleMapToJson(cur - name)
+            val tcur = p[Keys.appTemplateNames]?.let(::stringMapFromJson) ?: emptyMap()
+            p[Keys.appTemplateNames] = stringMapToJson(tcur.filterValues { it != name })
         }
     }
 
@@ -99,6 +112,11 @@ class SettingsRepository(private val context: Context) {
             val next = cur.toMutableMap()
             packageNames.forEach { next[it] = rule }
             p[Keys.appRules] = ruleMapToJson(next)
+
+            val tcur = p[Keys.appTemplateNames]?.let(::stringMapFromJson) ?: emptyMap()
+            val tnext = tcur.toMutableMap()
+            packageNames.forEach { tnext[it] = name }
+            p[Keys.appTemplateNames] = stringMapToJson(tnext)
         }
     }
 }

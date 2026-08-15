@@ -164,7 +164,7 @@ class MonitorService : Service() {
             putExtra(InterventionOverlayService.EXTRA_MODE, mode)
             putExtra(InterventionOverlayService.EXTRA_REMAINING_MILLIS, remainingMillis)
             putExtra(InterventionOverlayService.EXTRA_FRICTION_SECONDS, latestSettings.ruleFor(packageName).frictionSeconds)
-            putExtra(InterventionOverlayService.EXTRA_LIMIT_MODE, latestSettings.mode)
+            putExtra(InterventionOverlayService.EXTRA_LIMIT_MODE, latestSettings.ruleFor(packageName).mode)
             putExtra(InterventionOverlayService.EXTRA_OVERDRAFT_DELAY_SECONDS, latestSettings.overdraftDelaySeconds)
         }
         startService(intent)

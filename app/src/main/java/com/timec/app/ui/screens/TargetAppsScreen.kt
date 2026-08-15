@@ -1,5 +1,6 @@
 package com.timec.app.ui.screens
 
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -57,6 +58,16 @@ private sealed interface AppsNav {
 @Composable
 fun TargetAppsScreen(viewModel: AppViewModel, modifier: Modifier = Modifier) {
     var nav by remember { mutableStateOf<AppsNav>(AppsNav.List) }
+
+    // 系统返回键：子页面返回上级，只有主列表页交给系统（退出到桌面）
+    BackHandler(enabled = nav !is AppsNav.List) {
+        nav = when (val n = nav) {
+            is AppsNav.EditTemplate -> AppsNav.Templates
+            is AppsNav.ApplyTemplate -> AppsNav.Templates
+            else -> AppsNav.List
+        }
+    }
+
     when (val n = nav) {
         is AppsNav.List -> GuardedList(viewModel, modifier) { nav = it }
         is AppsNav.Picker -> AppPicker(viewModel, modifier, onBack = { nav = AppsNav.List })
@@ -118,7 +129,10 @@ private fun TopBar(title: String, onBack: () -> Unit) {
 private fun GuardedList(viewModel: AppViewModel, modifier: Modifier, nav: (AppsNav) -> Unit) {
     val settings by viewModel.settings.collectAsState()
     val apps by viewModel.apps.collectAsState()
+    val templateNames = settings.appTemplateNames
     val entries = settings.appRules.entries.sortedBy { viewModel.appLabel(it.key) }
+    val groups = entries.groupBy { templateNames[it.key] ?: "默认" }
+    val orderedGroups = groups.toList().sortedBy { (name, _) -> if (name == "默认") "0" else name }
 
     LazyColumn(
         modifier = modifier.fillMaxSize(),
@@ -147,20 +161,30 @@ private fun GuardedList(viewModel: AppViewModel, modifier: Modifier, nav: (AppsN
             }
         }
 
-        items(entries, key = { it.key }) { (pkg, rule) ->
-            Card(modifier = Modifier.fillMaxWidth().clickable { nav(AppsNav.Edit(pkg)) }) {
-                Row(
-                    modifier = Modifier.padding(12.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    AppIcon(appInfo(apps, pkg)?.icon, Modifier.size(40.dp))
-                    Spacer(Modifier.width(12.dp))
-                    Column(Modifier.weight(1f)) {
-                        Text(viewModel.appLabel(pkg), style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.Bold)
-                        Text(ruleSummary(rule), style = MaterialTheme.typography.bodyMedium)
-                    }
-                    TextButton(onClick = { viewModel.removeApp(pkg) }) {
-                        Icon(Icons.Outlined.Delete, contentDescription = "移除", tint = MaterialTheme.colorScheme.error)
+        orderedGroups.forEach { (templateName, groupEntries) ->
+            item(key = "h_" + templateName) {
+                Text(
+                    if (templateName == "默认") "默认规则" else "模板：" + templateName,
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold,
+                    modifier = Modifier.padding(top = 4.dp)
+                )
+            }
+            items(groupEntries, key = { it.key }) { (pkg, rule) ->
+                Card(modifier = Modifier.fillMaxWidth().clickable { nav(AppsNav.Edit(pkg)) }) {
+                    Row(
+                        modifier = Modifier.padding(12.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        AppIcon(appInfo(apps, pkg)?.icon, Modifier.size(40.dp))
+                        Spacer(Modifier.width(12.dp))
+                        Column(Modifier.weight(1f)) {
+                            Text(viewModel.appLabel(pkg), style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.Bold)
+                            Text(ruleSummary(rule), style = MaterialTheme.typography.bodyMedium)
+                        }
+                        TextButton(onClick = { viewModel.removeApp(pkg) }) {
+                            Icon(Icons.Outlined.Delete, contentDescription = "移除", tint = MaterialTheme.colorScheme.error)
+                        }
                     }
                 }
             }
@@ -225,7 +249,8 @@ private fun AppPicker(viewModel: AppViewModel, modifier: Modifier, onBack: () ->
         Button(
             onClick = {
                 val rule = if (ruleKey == "默认") settings.defaultRule else settings.templates[ruleKey] ?: settings.defaultRule
-                viewModel.addAppsWithRule(selected, rule)
+                val templateName = if (ruleKey == "默认") null else ruleKey
+                viewModel.addAppsWithRule(selected, rule, templateName)
                 onBack()
             },
             enabled = selected.isNotEmpty(),
@@ -237,7 +262,9 @@ private fun AppPicker(viewModel: AppViewModel, modifier: Modifier, onBack: () ->
 @Composable
 private fun TemplateList(viewModel: AppViewModel, modifier: Modifier, nav: (AppsNav) -> Unit) {
     val settings by viewModel.settings.collectAsState()
+    val apps by viewModel.apps.collectAsState()
     val entries = settings.templates.entries.toList()
+    val templateNames = settings.appTemplateNames
 
     LazyColumn(
         modifier = modifier.fillMaxSize(),
@@ -245,9 +272,7 @@ private fun TemplateList(viewModel: AppViewModel, modifier: Modifier, nav: (Apps
         verticalArrangement = Arrangement.spacedBy(10.dp)
     ) {
         item {
-            Row(Modifier.fillMaxWidth()) {
-                TopBar("模板", onBack = { nav(AppsNav.List) })
-            }
+            TopBar("模板", onBack = { nav(AppsNav.List) })
         }
         item {
             Button(onClick = { nav(AppsNav.EditTemplate(null)) }, modifier = Modifier.fillMaxWidth()) {
@@ -269,6 +294,17 @@ private fun TemplateList(viewModel: AppViewModel, modifier: Modifier, nav: (Apps
                         TextButton(onClick = { viewModel.deleteTemplate(name) }) { Text("删除") }
                     }
                     Text(ruleSummary(rule), style = MaterialTheme.typography.bodyMedium)
+                    val using = templateNames.filterValues { it == name }.keys.toList()
+                    if (using.isNotEmpty()) {
+                        Text("已应用到 " + using.size + " 个应用：", style = MaterialTheme.typography.bodyMedium)
+                        Row(horizontalArrangement = Arrangement.spacedBy(6.dp), modifier = Modifier.padding(top = 4.dp)) {
+                            using.take(8).forEach { pkg ->
+                                AppIcon(appInfo(apps, pkg)?.icon, Modifier.size(28.dp))
+                            }
+                        }
+                    } else {
+                        Text("还没有应用使用此模板", style = MaterialTheme.typography.bodyMedium)
+                    }
                     Button(onClick = { nav(AppsNav.ApplyTemplate(name)) }, modifier = Modifier.fillMaxWidth()) {
                         Text("应用到应用")
                     }
@@ -339,7 +375,8 @@ private fun ApplyTemplate(viewModel: AppViewModel, name: String, modifier: Modif
 
 private fun ruleSummary(rule: AppRule): String {
     val m = formatMultiplier(rule.overdraftMultiplier)
-    return "单次" + rule.sessionLimitMinutes + "分 · 每日" + rule.dailyLimitMinutes + "分 · 倍率" + m + "x"
+    val modeText = if (rule.mode == 0) "正常" else "时间银行"
+    return modeText + " · 单次" + rule.sessionLimitMinutes + "分 · 每日" + rule.dailyLimitMinutes + "分 · 倍率" + m + "x"
 }
 
 private fun formatMultiplier(value: Float): String {

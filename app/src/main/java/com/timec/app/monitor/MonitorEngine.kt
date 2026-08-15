@@ -175,7 +175,7 @@ object MonitorEngine {
                 session.lastActiveRealtime = now
             }
             FinalChoice.CONFIRM -> {
-                if (settings.mode == 1) startCooldown(session) else resetSessionToIdle(session)
+                if (ruleFor(packageName).mode == 1) startCooldown(session) else resetSessionToIdle(session)
                 publishState()
                 return ChoiceResult(true, true)
             }

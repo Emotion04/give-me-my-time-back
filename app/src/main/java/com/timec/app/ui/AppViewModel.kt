@@ -112,10 +112,6 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         viewModelScope.launch { settingsRepository.setThemeIndex(value) }
     }
 
-    fun setMode(value: Int) {
-        viewModelScope.launch { settingsRepository.setMode(value) }
-    }
-
     fun setOverdraftDelaySeconds(value: Int) {
         viewModelScope.launch { settingsRepository.setOverdraftDelaySeconds(value) }
     }
@@ -132,8 +128,8 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         viewModelScope.launch { settingsRepository.addApps(packageNames, settings.value.defaultRule) }
     }
 
-    fun addAppsWithRule(packageNames: Set<String>, rule: AppRule) {
-        viewModelScope.launch { settingsRepository.addApps(packageNames, rule) }
+    fun addAppsWithRule(packageNames: Set<String>, rule: AppRule, templateName: String? = null) {
+        viewModelScope.launch { settingsRepository.addApps(packageNames, rule, templateName) }
     }
 
     fun removeApp(packageName: String) {
@@ -141,7 +137,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun updateAppRule(packageName: String, rule: AppRule) {
-        viewModelScope.launch { settingsRepository.addApp(packageName, rule) }
+        viewModelScope.launch { settingsRepository.updateAppRule(packageName, rule) }
     }
 
     fun saveTemplate(name: String, rule: AppRule) {

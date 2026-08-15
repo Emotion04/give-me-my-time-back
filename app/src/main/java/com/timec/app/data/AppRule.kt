@@ -3,6 +3,8 @@ package com.timec.app.data
 import org.json.JSONObject
 
 data class AppRule(
+    // 0 = 正常模式（到点延长一分钟），1 = 时间银行（支持透支）
+    val mode: Int = 1,
     val sessionLimitMinutes: Int = 15,
     val dailyLimitMinutes: Int = 120,
     val floorMinutes: Int = 5,
@@ -17,6 +19,7 @@ data class AppRule(
 )
 
 fun AppRule.toJson(): String = JSONObject().apply {
+    put("md", mode)
     put("s", sessionLimitMinutes)
     put("d", dailyLimitMinutes)
     put("f", floorMinutes)
@@ -33,6 +36,7 @@ fun AppRule.toJson(): String = JSONObject().apply {
 fun appRuleFromJson(json: String): AppRule = try {
     val o = JSONObject(json)
     AppRule(
+        mode = o.optInt("md", 1),
         sessionLimitMinutes = o.optInt("s", 15),
         dailyLimitMinutes = o.optInt("d", 120),
         floorMinutes = o.optInt("f", 5),
@@ -60,6 +64,23 @@ fun ruleMapFromJson(json: String): Map<String, AppRule> = try {
     while (it.hasNext()) {
         val k = it.next()
         out[k] = appRuleFromJson(o.getString(k))
+    }
+    out
+} catch (e: Exception) {
+    emptyMap()
+}
+
+fun stringMapToJson(map: Map<String, String>): String = JSONObject().apply {
+    map.forEach { (k, v) -> put(k, v) }
+}.toString()
+
+fun stringMapFromJson(json: String): Map<String, String> = try {
+    val o = JSONObject(json)
+    val out = mutableMapOf<String, String>()
+    val it = o.keys()
+    while (it.hasNext()) {
+        val k = it.next()
+        out[k] = o.getString(k)
     }
     out
 } catch (e: Exception) {
