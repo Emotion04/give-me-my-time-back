@@ -1,23 +1,35 @@
-# Gradle / build
+# ===== Gradle / 构建产物 =====
 .gradle/
 build/
 app/build/
 .kotlin/
+captures/
 
-# Local SDK path (machine specific)
+# ===== 本机配置（含 SDK 路径，勿提交） =====
 local.properties
 
-# Offline gradle cache copied for sandbox build (huge)
-.gradle-home/
+# ===== 打包产物（通过 GitHub Releases 发布，不入库） =====
+*.apk
+*.aab
+*.ap_
+*.dex
+*.class
+*.log
+*.hprof
 
-# IDE
+# ===== IDE / 系统 =====
 .idea/
 *.iml
 .vscode/
+.DS_Store
+Thumbs.db
 
-# Temp
+# ===== 沙箱离线构建缓存（体积巨大，勿提交） =====
+.gradle-home/
+
+# ===== 临时文件 =====
 .wtest/
 .tmpjar/
 
-# Built APKs (publish via GitHub Releases instead)
-*.apk
+# 注意：debug.keystore 故意提交 —— 保证本机/CI 构建签名一致，
+# 这样后续升级可覆盖安装、无需卸载。个人侧载项目用 debug 签名足够。

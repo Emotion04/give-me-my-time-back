@@ -5,7 +5,6 @@ import android.app.usage.UsageStatsManager
 import android.content.Context
 import android.content.Intent
 import android.graphics.drawable.Drawable
-import android.os.SystemClock
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.util.Calendar
@@ -56,6 +55,13 @@ class UsageRepository(private val context: Context) {
         val manager = usageStatsManager ?: return@withContext emptyMap()
         val start = startOfDay(System.currentTimeMillis())
         manager.queryUsageStats(UsageStatsManager.INTERVAL_DAILY, start, System.currentTimeMillis())
+            .associate { it.packageName to it.totalTimeInForeground }
+    }
+
+    fun getTodayUsageByPackageNow(): Map<String, Long> {
+        val manager = usageStatsManager ?: return emptyMap()
+        val start = startOfDay(System.currentTimeMillis())
+        return manager.queryUsageStats(UsageStatsManager.INTERVAL_DAILY, start, System.currentTimeMillis())
             .associate { it.packageName to it.totalTimeInForeground }
     }
 
@@ -155,20 +161,19 @@ class UsageRepository(private val context: Context) {
      * Uses a short, fixed UsageEvents window so polling stays lightweight. The caller is expected
      * to invoke this every second while the screen is on, and every few seconds when idle.
      */
-    fun detectForegroundPackage(nowRealtime: Long = SystemClock.elapsedRealtime()): String? {
+    fun detectForegroundPackage(): String? {
         val manager = usageStatsManager ?: return null
-        val eventWindowMillis = if (foregroundInitialized) 5_000L else 10 * 60 * 1000L
+        val nowEpoch = System.currentTimeMillis()
+        val eventWindowMillis = if (foregroundInitialized) 10_000L else 10 * 60 * 1000L
         var foreground = lastKnownForegroundPackage
         try {
-            val events = manager.queryEvents(nowRealtime - eventWindowMillis, nowRealtime)
+            val events = manager.queryEvents(nowEpoch - eventWindowMillis, nowEpoch)
             val event = UsageEvents.Event()
             while (events.hasNextEvent()) {
                 events.getNextEvent(event)
                 when (event.eventType) {
                     UsageEvents.Event.MOVE_TO_FOREGROUND,
                     UsageEvents.Event.ACTIVITY_RESUMED -> foreground = event.packageName
-                    UsageEvents.Event.MOVE_TO_BACKGROUND,
-                    UsageEvents.Event.ACTIVITY_PAUSED -> if (foreground == event.packageName) foreground = null
                 }
             }
             lastKnownForegroundPackage = foreground

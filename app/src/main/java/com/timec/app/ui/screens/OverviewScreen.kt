@@ -38,6 +38,7 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import com.timec.app.data.AppInfo
+import com.timec.app.monitor.MonitorService
 import com.timec.app.monitor.SessionPhase
 import com.timec.app.ui.AppViewModel
 import com.timec.app.ui.components.AppIcon
@@ -121,7 +122,8 @@ fun OverviewScreen(viewModel: AppViewModel, modifier: Modifier = Modifier) {
                 monitorState.activePackage,
                 monitorState.activeSnapshot,
                 apps,
-                monitorState.foregroundPackage
+                monitorState.foregroundPackage,
+                settings.appRules.size
             )
         }
 
@@ -236,36 +238,44 @@ private fun ActiveSessionCard(
     activePackage: String?,
     snapshot: com.timec.app.monitor.SessionSnapshot?,
     apps: List<AppInfo>,
-    foregroundPackage: String?
+    foregroundPackage: String?,
+    guardedCount: Int
 ) {
     Card(colors = CardDefaults.cardColors(
         containerColor = MaterialTheme.colorScheme.primaryContainer
     )) {
         Column(Modifier.padding(16.dp)) {
             Text("当前守护", style = MaterialTheme.typography.titleMedium)
-            val label = activePackage?.let { appLabel(apps, it) } ?: "当前没有正在守护的目标应用"
-            Text(label, style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
+            Text("已守护 " + guardedCount + " 个应用", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
+            Spacer(Modifier.height(4.dp))
+            Text(if (MonitorService.isRunning) "守护服务：运行中" else "守护服务：已停止")
+            Spacer(Modifier.height(4.dp))
+            if (foregroundPackage != null) {
+                Text("当前前台：" + appLabel(apps, foregroundPackage))
+            } else {
+                Text("当前前台：未检测到")
+            }
             if (activePackage != null && snapshot != null) {
-                val remaining = (snapshot.allowedMillis - snapshot.consumedMillis).coerceAtLeast(0L)
                 Spacer(Modifier.height(8.dp))
-                Text("已使用 " + formatDuration(snapshot.activeMillis) + " / 额度 " + formatDuration(snapshot.allowedMillis))
-                Text("已消耗 " + formatDuration(snapshot.consumedMillis) + "，剩余 " + formatDuration(remaining))
-                if (snapshot.currentRateX > 1.0) {
-                    Text("消耗倍率 x" + snapshot.currentRateX.toString())
-                }
-                if (snapshot.bankedMillis > 0L) {
-                    Text("通过离开挣回 " + formatDuration(snapshot.bankedMillis))
+                Text("本次连续使用 " + formatDuration(snapshot.sessionActiveMillis) + " / " + formatDuration(snapshot.sessionLimitMillis))
+                if (snapshot.dailyLimitMillis > 0L) {
+                    Text("今日已用 " + formatDuration(snapshot.dailyUsedMillis) + " / " + formatDuration(snapshot.dailyLimitMillis))
+                } else {
+                    Text("今日已用 " + formatDuration(snapshot.dailyUsedMillis))
                 }
                 Text(
                     when (snapshot.phase) {
-                        SessionPhase.FINAL -> "已进入本次正式限制"
-                        SessionPhase.COOLDOWN -> "冷却中"
-                        else -> "正在连续使用"
+                        SessionPhase.RUNNING -> "正常使用中"
+                        SessionPhase.OVERDRAFT -> "透支中：" + formatDuration(snapshot.overdraftConsumedMillis) + " / " + formatDuration(snapshot.overdraftAllowanceMillis)
+                        SessionPhase.COOLDOWN_OVERDRAFT -> "冷却期透支中，下次冷却已 +" + formatDuration(snapshot.cooldownPenaltyMillis)
+                        SessionPhase.COOLDOWN -> "冷却中，剩余 " + formatDuration(snapshot.cooldownRemainingMillis)
+                        SessionPhase.DAILY_EXHAUSTED -> "今日总限额已用完"
+                        SessionPhase.IDLE -> "空闲"
                     }
                 )
-            } else if (foregroundPackage != null) {
+            } else if (guardedCount > 0) {
                 Spacer(Modifier.height(8.dp))
-                Text("前台应用：" + appLabel(apps, foregroundPackage))
+                Text("打开目标应用后，这里会显示实时使用状态")
             }
         }
     }

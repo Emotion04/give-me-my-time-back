@@ -1,32 +1,25 @@
 package com.timec.app.monitor
 
 import android.os.SystemClock
+import com.timec.app.data.AppRule
 import com.timec.app.data.AppSettings
-import com.timec.app.data.RecoverMode
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 
-enum class SessionPhase {
-    IDLE,
-    RUNNING,
-    FINAL,
-    COOLDOWN,
-    DONE
-}
+enum class SessionPhase { IDLE, RUNNING, OVERDRAFT, COOLDOWN_OVERDRAFT, COOLDOWN, DAILY_EXHAUSTED }
 
 data class SessionSnapshot(
     val packageName: String,
     val phase: SessionPhase,
-    val activeMillis: Long,
-    val consumedMillis: Long,
-    val allowedMillis: Long,
-    val baseLimitMillis: Long,
-    val bankedMillis: Long,
-    val extensionMillis: Long,
-    val extensionsLeft: Int,
-    val currentRateX: Double,
-    val cooldownRemainingMillis: Long
+    val sessionActiveMillis: Long,
+    val sessionLimitMillis: Long,
+    val dailyUsedMillis: Long,
+    val dailyLimitMillis: Long,
+    val overdraftConsumedMillis: Long,
+    val overdraftAllowanceMillis: Long,
+    val cooldownRemainingMillis: Long,
+    val cooldownPenaltyMillis: Long
 )
 
 data class MonitorUiState(
@@ -34,27 +27,23 @@ data class MonitorUiState(
     val activePackage: String? = null,
     val activeSnapshot: SessionSnapshot? = null,
     val enabled: Boolean = true,
-    val selectedPackages: Set<String> = emptySet()
+    val guardedPackages: Set<String> = emptySet()
 )
 
 data class TickResult(
     val warningPackages: Set<String> = emptySet(),
     val finalPackage: String? = null,
+    val overdraftExhaustedPackage: String? = null,
+    val dailyExhaustedPackage: String? = null,
     val cooldownPackage: String? = null,
     val cooldownRemainingMillis: Long = 0L,
     val frictionPackage: String? = null
 )
 
-data class ChoiceResult(
-    val dismissOverlay: Boolean,
-    val goHome: Boolean
-)
+data class ChoiceResult(val dismissOverlay: Boolean, val goHome: Boolean)
 
-enum class FinalChoice {
-    EXTEND,
-    SKIP,
-    CONFIRM
-}
+enum class FinalChoice { EXTEND, CONFIRM, CONTINUE }
+enum class OverdraftChoice { CONFIRM, COOLDOWN_OVERDRAFT }
 
 object MonitorEngine {
     private val _state = MutableStateFlow(MonitorUiState())
@@ -65,106 +54,101 @@ object MonitorEngine {
     private var foregroundPackage: String? = null
     private var overlayPackage: String? = null
     private var overlayMode: String? = null
+    private var dailyUsedMap: Map<String, Long> = emptyMap()
 
     fun updateSettings(newSettings: AppSettings) {
         settings = newSettings
-        val validPackages = newSettings.selectedPackages
-        sessions.keys.retainAll(validPackages)
-        sessions.values.forEach { session ->
-            session.baseLimitMillis = baseLimitMillis()
-        }
+        sessions.keys.retainAll(newSettings.appRules.keys)
         publishState()
     }
 
     fun tick(
         nowRealtime: Long = SystemClock.elapsedRealtime(),
         screenOn: Boolean,
-        detectedForegroundPackage: String?
+        detectedForegroundPackage: String?,
+        dailyUsedMap: Map<String, Long>
     ): TickResult {
         foregroundPackage = detectedForegroundPackage
+        this.dailyUsedMap = dailyUsedMap
+
         val warningPackages = mutableSetOf<String>()
         var finalPackage: String? = null
+        var overdraftExhaustedPackage: String? = null
+        var dailyExhaustedPackage: String? = null
         var cooldownPackage: String? = null
         var cooldownRemaining = 0L
         var frictionPackage: String? = null
 
-        if (screenOn && settings.enabled) {
-            val activePackage = detectedForegroundPackage?.takeIf { it in settings.selectedPackages }
-            activePackage?.let { ensureSession(it) }
+        val activePackage = if (screenOn && settings.enabled) {
+            detectedForegroundPackage?.takeIf { it in settings.appRules.keys }
+        } else null
+        activePackage?.let { ensureSession(it) }
 
-            sessions.values.forEach { session ->
-                val isActive = session.packageName == activePackage
-                if (isActive) {
-                    when (session.phase) {
-                        SessionPhase.COOLDOWN -> {
-                            val remaining = (session.cooldownUntil ?: 0L) - nowRealtime
-                            if (remaining > 0) {
-                                cooldownPackage = session.packageName
-                                cooldownRemaining = remaining
-                            } else {
-                                resetSession(session, SessionPhase.IDLE)
-                                if (beginActiveSession(session, nowRealtime)) {
-                                    frictionPackage = session.packageName
-                                }
-                            }
-                        }
-                        SessionPhase.FINAL -> {
-                            if (overlayPackage != session.packageName) {
-                                finalPackage = session.packageName
-                            }
-                        }
-                        SessionPhase.DONE, SessionPhase.IDLE -> {
-                            if (beginActiveSession(session, nowRealtime)) {
-                                frictionPackage = session.packageName
-                            }
-                        }
-                        SessionPhase.RUNNING -> {
-                            session.lastActiveRealtime?.let { last ->
-                                val elapsed = (nowRealtime - last).coerceAtLeast(0L)
-                                session.activeMillis += elapsed
-                                val rate = rateFor(session.activeMillis)
-                                session.currentRateX = rate
-                                session.consumedMillis += (elapsed * rate).toLong()
-                            }
-                            session.lastActiveRealtime = nowRealtime
-                            session.awayStartRealtime = null
+        sessions.values.forEach { session ->
+            val pkg = session.packageName
+            val isActive = session.packageName == activePackage
+            val overlayShowing = overlayPackage == session.packageName
 
-                            maybeSendWarnings(session, warningPackages)
-
-                            val suppressed = session.finalSuppressUntil?.let { nowRealtime < it } ?: false
-                            if (!suppressed && session.consumedMillis >= session.allowedMillis &&
-                                overlayPackage != session.packageName) {
-                                session.phase = SessionPhase.FINAL
-                                finalPackage = session.packageName
-                            }
+            if (isActive && !overlayShowing) {
+                when (session.phase) {
+                    SessionPhase.IDLE -> {
+                        if (dailyLimitHit(pkg)) {
+                            session.phase = SessionPhase.DAILY_EXHAUSTED
+                            dailyExhaustedPackage = pkg
+                        } else {
+                            if (startSession(session, nowRealtime)) frictionPackage = pkg
                         }
                     }
-                } else {
-                    handleAway(session, nowRealtime)
-                    if (session.phase == SessionPhase.COOLDOWN) {
+                    SessionPhase.RUNNING -> {
+                        advance(session, nowRealtime)
+                        maybeWarn(session, warningPackages)
+                        when {
+                            dailyLimitHit(pkg) -> {
+                                session.phase = SessionPhase.DAILY_EXHAUSTED
+                                dailyExhaustedPackage = pkg
+                            }
+                            session.sessionActiveMillis >= sessionLimitMillis(pkg) + session.extensionMillis ->
+                                finalPackage = pkg
+                        }
+                    }
+                    SessionPhase.OVERDRAFT -> {
+                        val elapsed = advance(session, nowRealtime)
+                        session.overdraftConsumedMillis += elapsed
+                        when {
+                            dailyLimitHit(pkg) -> {
+                                session.phase = SessionPhase.DAILY_EXHAUSTED
+                                dailyExhaustedPackage = pkg
+                            }
+                            session.overdraftConsumedMillis >= session.overdraftAllowanceMillis ->
+                                overdraftExhaustedPackage = pkg
+                        }
+                    }
+                    SessionPhase.COOLDOWN_OVERDRAFT -> {
+                        val elapsed = advance(session, nowRealtime)
+                        session.cooldownOverdraftConsumedMillis += elapsed
+                        if (dailyLimitHit(pkg)) {
+                            session.phase = SessionPhase.DAILY_EXHAUSTED
+                            dailyExhaustedPackage = pkg
+                        }
+                    }
+                    SessionPhase.COOLDOWN -> {
                         val remaining = (session.cooldownUntil ?: 0L) - nowRealtime
                         if (remaining > 0) {
-                            cooldownPackage = session.packageName
+                            cooldownPackage = pkg
                             cooldownRemaining = remaining
                         } else {
-                            resetSession(session, SessionPhase.IDLE)
+                            resetSessionToIdle(session)
                         }
                     }
+                    SessionPhase.DAILY_EXHAUSTED -> {
+                        dailyExhaustedPackage = pkg
+                    }
                 }
-            }
-        } else {
-            sessions.values.forEach { session ->
+            } else {
+                handleAway(session, nowRealtime)
                 if (session.phase == SessionPhase.COOLDOWN) {
                     val remaining = (session.cooldownUntil ?: 0L) - nowRealtime
-                    if (remaining > 0) {
-                        cooldownPackage = session.packageName
-                        cooldownRemaining = remaining
-                    } else {
-                        resetSession(session, SessionPhase.IDLE)
-                    }
-                } else if (session.phase == SessionPhase.RUNNING) {
-                    session.lastActiveRealtime = null
-                    session.awayStartRealtime = null
+                    if (remaining <= 0L) resetSessionToIdle(session)
                 }
             }
         }
@@ -173,6 +157,8 @@ object MonitorEngine {
         return TickResult(
             warningPackages = warningPackages,
             finalPackage = finalPackage,
+            overdraftExhaustedPackage = overdraftExhaustedPackage,
+            dailyExhaustedPackage = dailyExhaustedPackage,
             cooldownPackage = cooldownPackage,
             cooldownRemainingMillis = cooldownRemaining,
             frictionPackage = frictionPackage
@@ -180,60 +166,58 @@ object MonitorEngine {
     }
 
     fun choose(packageName: String, choice: FinalChoice): ChoiceResult {
-        val session = sessions[packageName]
-            ?: return ChoiceResult(dismissOverlay = true, goHome = true)
-        return when (choice) {
+        val session = sessions[packageName] ?: return ChoiceResult(true, true)
+        val now = SystemClock.elapsedRealtime()
+        when (choice) {
             FinalChoice.EXTEND -> {
-                if (session.extensionCount < settings.maxExtensions) {
-                    session.extensionMillis += settings.extensionSeconds * 1000L
-                    session.extensionCount++
-                    session.phase = SessionPhase.RUNNING
-                    session.lastActiveRealtime = SystemClock.elapsedRealtime()
-                    session.awayStartRealtime = null
-                }
-                publishState()
-                ChoiceResult(dismissOverlay = true, goHome = false)
-            }
-            FinalChoice.SKIP -> {
-                if (settings.recoverMode == RecoverMode.RECHARGE) {
-                    // 柔和模式：忽略本次提醒，进入透支（保持运行，阶梯高费率），60 秒后再次提醒
-                    session.phase = SessionPhase.RUNNING
-                    session.lastActiveRealtime = SystemClock.elapsedRealtime()
-                    session.awayStartRealtime = null
-                    session.finalSuppressUntil = SystemClock.elapsedRealtime() + SKIP_GRACE_MILLIS
-                    publishState()
-                    ChoiceResult(dismissOverlay = true, goHome = false)
-                } else {
-                    startCooldown(session, settings.cooldownSeconds * 1000L)
-                    publishState()
-                    ChoiceResult(dismissOverlay = true, goHome = true)
-                }
+                session.extensionMillis += extensionSeconds(packageName) * 1000L
+                session.phase = SessionPhase.RUNNING
+                session.lastActiveRealtime = now
             }
             FinalChoice.CONFIRM -> {
-                if (settings.recoverMode == RecoverMode.COOLDOWN) {
-                    startCooldown(session, settings.cooldownSeconds * 1000L)
-                } else {
-                    startCooldown(session, settings.breakResetSeconds * 1000L)
-                }
+                if (settings.mode == 1) startCooldown(session) else resetSessionToIdle(session)
                 publishState()
-                ChoiceResult(dismissOverlay = true, goHome = true)
+                return ChoiceResult(true, true)
+            }
+            FinalChoice.CONTINUE -> {
+                session.phase = SessionPhase.OVERDRAFT
+                session.overdraftConsumedMillis = 0L
+                session.overdraftAllowanceMillis = computeOverdraftAllowance(packageName)
+                session.lastActiveRealtime = now
             }
         }
+        publishState()
+        return ChoiceResult(true, false)
     }
 
-    fun extensionsLeftFor(packageName: String): Int {
-        val session = sessions[packageName] ?: return 0
-        return (settings.maxExtensions - session.extensionCount).coerceAtLeast(0)
-    }
-
-    fun shouldHardBlock(packageName: String, nowRealtime: Long = SystemClock.elapsedRealtime()): Boolean {
-        if (!settings.hardBlock) return false
-        val session = sessions[packageName] ?: return false
-        return when (session.phase) {
-            SessionPhase.FINAL -> true
-            SessionPhase.COOLDOWN -> (session.cooldownUntil ?: 0L) > nowRealtime
-            else -> false
+    fun chooseOverdraft(packageName: String, choice: OverdraftChoice): ChoiceResult {
+        val session = sessions[packageName] ?: return ChoiceResult(true, true)
+        val now = SystemClock.elapsedRealtime()
+        when (choice) {
+            OverdraftChoice.CONFIRM -> {
+                startCooldown(session)
+                publishState()
+                return ChoiceResult(true, true)
+            }
+            OverdraftChoice.COOLDOWN_OVERDRAFT -> {
+                session.phase = SessionPhase.COOLDOWN_OVERDRAFT
+                session.cooldownOverdraftConsumedMillis = 0L
+                session.lastActiveRealtime = now
+            }
         }
+        publishState()
+        return ChoiceResult(true, false)
+    }
+
+    fun chooseCooldownOverdraft(packageName: String): ChoiceResult {
+        val session = sessions[packageName] ?: return ChoiceResult(true, true)
+        val now = SystemClock.elapsedRealtime()
+        session.phase = SessionPhase.COOLDOWN_OVERDRAFT
+        session.cooldownOverdraftConsumedMillis = 0L
+        session.cooldownUntil = null
+        session.lastActiveRealtime = now
+        publishState()
+        return ChoiceResult(true, false)
     }
 
     fun setOverlayShowing(packageName: String, mode: String) {
@@ -259,174 +243,171 @@ object MonitorEngine {
         publishState()
     }
 
-    private fun baseLimitMillis(): Long = settings.limitMinutes * 60_000L
+    // ---- helpers ----
 
-    private fun rateFor(activeMillis: Long): Double {
-        if (!settings.tieredEnabled) return 1.0
-        val base = baseLimitMillis()
-        return when {
-            activeMillis >= base * 150 / 100 -> settings.rate150x.toDouble()
-            activeMillis >= base * 100 / 100 -> settings.rate100x.toDouble()
-            else -> 1.0
-        }
+    private fun ruleFor(packageName: String): AppRule = settings.ruleFor(packageName)
+    private fun sessionLimitMillis(packageName: String): Long = ruleFor(packageName).sessionLimitMinutes * 60_000L
+    private fun dailyLimitMillis(packageName: String): Long = ruleFor(packageName).dailyLimitMinutes * 60_000L
+    private fun floorMillis(packageName: String): Long = ruleFor(packageName).floorMinutes * 60_000L
+    private fun cooldownBaseMillis(packageName: String): Long = ruleFor(packageName).cooldownMinutes * 60_000L
+    private fun extensionSeconds(packageName: String): Int = ruleFor(packageName).extensionSeconds
+
+    private fun computeOverdraftAllowance(packageName: String): Long {
+        val m = ruleFor(packageName).overdraftMultiplier
+        if (m <= 0f) return 0L
+        return ((sessionLimitMillis(packageName) - floorMillis(packageName)).coerceAtLeast(0L) / m).toLong()
     }
 
-    private fun maybeSendWarnings(session: Session, warningPackages: MutableSet<String>) {
-        val base = baseLimitMillis()
-        if (settings.warnPct1 > 0 && !session.warning1Sent &&
-            session.activeMillis >= base * settings.warnPct1 / 100) {
-            session.warning1Sent = true
-            warningPackages += session.packageName
-        }
-        if (settings.warnPct2 > 0 && !session.warning2Sent &&
-            session.activeMillis >= base * settings.warnPct2 / 100) {
-            session.warning2Sent = true
-            warningPackages += session.packageName
-        }
+    private fun dailyLimitHit(packageName: String): Boolean {
+        val limit = dailyLimitMillis(packageName)
+        return limit > 0L && (dailyUsedMap[packageName] ?: 0L) >= limit
+    }
+
+    private fun cooldownPenaltyMillis(session: Session): Long {
+        val minutes = session.cooldownOverdraftConsumedMillis / 60_000L
+        return minutes * ruleFor(session.packageName).cooldownPenaltyMinutes * 60_000L
     }
 
     private fun ensureSession(packageName: String) {
-        if (sessions[packageName] == null) {
-            sessions[packageName] = Session(
-                packageName = packageName,
-                baseLimitMillis = baseLimitMillis()
-            )
-        }
+        if (sessions[packageName] == null) sessions[packageName] = Session(packageName)
     }
 
-    // 开始一个新的活跃会话；返回是否应展示打开摩擦页
-    private fun beginActiveSession(session: Session, nowRealtime: Long): Boolean {
-        val shouldFriction = settings.frictionEnabled && !session.frictionShown
+    private fun startSession(session: Session, nowRealtime: Long): Boolean {
+        val shouldFriction = ruleFor(session.packageName).frictionEnabled && !session.frictionShown
         session.frictionShown = true
         session.phase = SessionPhase.RUNNING
-        session.lastActiveRealtime = nowRealtime
-        session.awayStartRealtime = null
-        session.activeMillis = 0L
-        session.consumedMillis = 0L
-        session.bankedMillis = 0L
+        session.sessionActiveMillis = 0L
         session.extensionMillis = 0L
-        session.extensionCount = 0
-        session.earnedWorkBlocks = 0L
+        session.overdraftConsumedMillis = 0L
+        session.overdraftAllowanceMillis = 0L
+        session.cooldownOverdraftConsumedMillis = 0L
+        session.cooldownUntil = null
+        session.cooldownPenaltyMillis = 0L
+        session.lastActiveRealtime = nowRealtime
         session.warning1Sent = false
         session.warning2Sent = false
-        session.finalSuppressUntil = null
-        session.cooldownUntil = null
-        session.currentRateX = 1.0
         return shouldFriction
     }
 
+    private fun advance(session: Session, nowRealtime: Long): Long {
+        val last = session.lastActiveRealtime
+        if (last == null) {
+            session.lastActiveRealtime = nowRealtime
+            return 0L
+        }
+        val elapsed = (nowRealtime - last).coerceAtLeast(0L)
+        session.sessionActiveMillis += elapsed
+        session.lastActiveRealtime = nowRealtime
+        return elapsed
+    }
+
+    private fun maybeWarn(session: Session, warningPackages: MutableSet<String>) {
+        val pkg = session.packageName
+        val limit = sessionLimitMillis(pkg)
+        if (ruleFor(pkg).warnPct1 > 0 && !session.warning1Sent &&
+            session.sessionActiveMillis >= limit * ruleFor(pkg).warnPct1 / 100) {
+            session.warning1Sent = true
+            warningPackages += pkg
+        }
+        if (ruleFor(pkg).warnPct2 > 0 && !session.warning2Sent &&
+            session.sessionActiveMillis >= limit * ruleFor(pkg).warnPct2 / 100) {
+            session.warning2Sent = true
+            warningPackages += pkg
+        }
+    }
+
     private fun handleAway(session: Session, nowRealtime: Long) {
-        if (session.phase == SessionPhase.COOLDOWN || session.phase == SessionPhase.FINAL) return
-        if (session.lastActiveRealtime == null) return
-
-        val awayStart = session.awayStartRealtime ?: nowRealtime.also {
-            session.awayStartRealtime = it
-            session.earnedWorkBlocks = 0L
-        }
-        val awayMillis = (nowRealtime - awayStart).coerceAtLeast(0L)
-
-        val resetMillis = settings.breakResetSeconds * 1000L
-        if (awayMillis >= resetMillis) {
-            resetSession(session, SessionPhase.IDLE)
-            return
-        }
-
-        if (settings.recoverMode == RecoverMode.RECHARGE) {
-            val workMillis = settings.earnWorkSeconds * 1000L
-            if (workMillis > 0) {
-                val earnedBlocks = awayMillis / workMillis
-                if (earnedBlocks > session.earnedWorkBlocks) {
-                    val addedBlocks = earnedBlocks - session.earnedWorkBlocks
-                    val rewardMillis = settings.earnRewardSeconds * 1000L
-                    session.bankedMillis += addedBlocks * rewardMillis
-                    session.earnedWorkBlocks = earnedBlocks
-                }
+        when (session.phase) {
+            SessionPhase.RUNNING, SessionPhase.OVERDRAFT -> session.lastActiveRealtime = null
+            SessionPhase.COOLDOWN_OVERDRAFT -> {
+                session.lastActiveRealtime = null
+                startCooldown(session)
             }
+            else -> {}
         }
     }
 
-    private fun startCooldown(session: Session, durationMillis: Long) {
-        resetSession(session, SessionPhase.COOLDOWN)
-        session.cooldownUntil = SystemClock.elapsedRealtime() + durationMillis
-    }
-
-    private fun resetSession(session: Session, phase: SessionPhase) {
-        session.phase = phase
-        session.activeMillis = 0L
-        session.consumedMillis = 0L
-        session.bankedMillis = 0L
+    private fun startCooldown(session: Session) {
+        val penalty = cooldownPenaltyMillis(session)
+        session.phase = SessionPhase.COOLDOWN
+        session.cooldownUntil = SystemClock.elapsedRealtime() + cooldownBaseMillis(session.packageName) + penalty
+        session.cooldownPenaltyMillis = penalty
+        session.sessionActiveMillis = 0L
         session.extensionMillis = 0L
-        session.extensionCount = 0
+        session.overdraftConsumedMillis = 0L
+        session.overdraftAllowanceMillis = 0L
+        session.cooldownOverdraftConsumedMillis = 0L
         session.lastActiveRealtime = null
-        session.awayStartRealtime = null
-        session.earnedWorkBlocks = 0L
         session.warning1Sent = false
         session.warning2Sent = false
-        session.finalSuppressUntil = null
+        session.frictionShown = false
+    }
+
+    private fun resetSessionToIdle(session: Session) {
+        session.phase = SessionPhase.IDLE
+        session.sessionActiveMillis = 0L
+        session.extensionMillis = 0L
+        session.overdraftConsumedMillis = 0L
+        session.overdraftAllowanceMillis = 0L
+        session.cooldownOverdraftConsumedMillis = 0L
         session.cooldownUntil = null
-        session.currentRateX = 1.0
+        session.cooldownPenaltyMillis = 0L
+        session.lastActiveRealtime = null
+        session.warning1Sent = false
+        session.warning2Sent = false
         session.frictionShown = false
     }
 
     private fun publishState() {
-        val activePackage = foregroundPackage?.takeIf { it in settings.selectedPackages }
-        val snapshot = activePackage?.let { pkg ->
-            sessions[pkg]?.snapshot(nowRealtime = SystemClock.elapsedRealtime(), maxExtensions = settings.maxExtensions)
-        }
+        val activePackage = foregroundPackage?.takeIf { it in settings.appRules.keys }
+        val snapshot = activePackage?.let { pkg -> sessions[pkg]?.let { snapshotOf(it) } }
         _state.update {
             MonitorUiState(
                 foregroundPackage = foregroundPackage,
                 activePackage = activePackage,
                 activeSnapshot = snapshot,
                 enabled = settings.enabled,
-                selectedPackages = settings.selectedPackages
+                guardedPackages = settings.appRules.keys
             )
         }
     }
 
-    private class Session(
-        val packageName: String,
-        var baseLimitMillis: Long
-    ) {
+    private fun snapshotOf(s: Session): SessionSnapshot {
+        val pkg = s.packageName
+        val remaining = if (s.phase == SessionPhase.COOLDOWN) {
+            ((s.cooldownUntil ?: 0L) - SystemClock.elapsedRealtime()).coerceAtLeast(0L)
+        } else 0L
+        val penalty = if (s.phase == SessionPhase.COOLDOWN_OVERDRAFT) {
+            cooldownPenaltyMillis(s)
+        } else {
+            s.cooldownPenaltyMillis
+        }
+        return SessionSnapshot(
+            packageName = pkg,
+            phase = s.phase,
+            sessionActiveMillis = s.sessionActiveMillis,
+            sessionLimitMillis = sessionLimitMillis(pkg) + s.extensionMillis,
+            dailyUsedMillis = dailyUsedMap[pkg] ?: 0L,
+            dailyLimitMillis = dailyLimitMillis(pkg),
+            overdraftConsumedMillis = s.overdraftConsumedMillis,
+            overdraftAllowanceMillis = s.overdraftAllowanceMillis,
+            cooldownRemainingMillis = remaining,
+            cooldownPenaltyMillis = penalty
+        )
+    }
+
+    private class Session(val packageName: String) {
         var phase: SessionPhase = SessionPhase.IDLE
-        var activeMillis: Long = 0L
-        var consumedMillis: Long = 0L
-        var bankedMillis: Long = 0L
+        var sessionActiveMillis: Long = 0L
         var extensionMillis: Long = 0L
-        var extensionCount: Int = 0
-        var currentRateX: Double = 1.0
+        var overdraftConsumedMillis: Long = 0L
+        var overdraftAllowanceMillis: Long = 0L
+        var cooldownOverdraftConsumedMillis: Long = 0L
+        var cooldownUntil: Long? = null
+        var cooldownPenaltyMillis: Long = 0L
         var lastActiveRealtime: Long? = null
-        var awayStartRealtime: Long? = null
-        var earnedWorkBlocks: Long = 0L
         var warning1Sent: Boolean = false
         var warning2Sent: Boolean = false
         var frictionShown: Boolean = false
-        var finalSuppressUntil: Long? = null
-        var cooldownUntil: Long? = null
-
-        val allowedMillis: Long
-            get() = baseLimitMillis + bankedMillis + extensionMillis
-
-        fun snapshot(nowRealtime: Long, maxExtensions: Int): SessionSnapshot {
-            val remaining = when (phase) {
-                SessionPhase.COOLDOWN -> ((cooldownUntil ?: 0L) - nowRealtime).coerceAtLeast(0L)
-                else -> 0L
-            }
-            return SessionSnapshot(
-                packageName = packageName,
-                phase = phase,
-                activeMillis = activeMillis,
-                consumedMillis = consumedMillis,
-                allowedMillis = allowedMillis,
-                baseLimitMillis = baseLimitMillis,
-                bankedMillis = bankedMillis,
-                extensionMillis = extensionMillis,
-                extensionsLeft = (maxExtensions - extensionCount).coerceAtLeast(0),
-                currentRateX = currentRateX,
-                cooldownRemainingMillis = remaining
-            )
-        }
     }
-
-    private const val SKIP_GRACE_MILLIS = 60_000L
 }

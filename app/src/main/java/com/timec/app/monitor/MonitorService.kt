@@ -19,6 +19,7 @@ import com.timec.app.R
 import com.timec.app.data.AppSettings
 import com.timec.app.data.SettingsRepository
 import com.timec.app.data.UsageRepository
+import androidx.core.content.ContextCompat
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -40,17 +41,35 @@ class MonitorService : Service() {
         }
     }
 
+    private val screenReceiver = object : BroadcastReceiver() {
+        override fun onReceive(context: Context, intent: Intent) {
+            when (intent.action) {
+                Intent.ACTION_SCREEN_OFF -> handler.removeCallbacks(tickRunnable)
+                Intent.ACTION_SCREEN_ON -> {
+                    handler.removeCallbacks(tickRunnable)
+                    handler.post(tickRunnable)
+                }
+            }
+        }
+    }
+
     override fun onCreate() {
         super.onCreate()
+        isRunning = true
         settingsRepository = SettingsRepository(this)
         usageRepository = UsageRepository(this)
         powerManager = getSystemService(POWER_SERVICE) as PowerManager
         createChannels()
-        serviceScope.launch {
+        val screenFilter = IntentFilter().apply {
+            addAction(Intent.ACTION_SCREEN_ON)
+            addAction(Intent.ACTION_SCREEN_OFF)
+        }
+        ContextCompat.registerReceiver(this, screenReceiver, screenFilter, ContextCompat.RECEIVER_EXPORTED)
+        serviceScope.launch(Dispatchers.Main) {
             settingsRepository.settings.collect { settings ->
                 latestSettings = settings
                 MonitorEngine.updateSettings(settings)
-                if (!settings.enabled || settings.selectedPackages.isEmpty()) {
+                if (!settings.enabled || settings.appRules.isEmpty()) {
                     stopSelf()
                 } else {
                     updateForegroundNotification()
@@ -69,6 +88,8 @@ class MonitorService : Service() {
     override fun onBind(intent: Intent?): IBinder? = null
 
     override fun onDestroy() {
+        isRunning = false
+        try { unregisterReceiver(screenReceiver) } catch (_: Exception) {}
         handler.removeCallbacks(tickRunnable)
         serviceScope.cancel()
         MonitorEngine.reset()
@@ -78,19 +99,17 @@ class MonitorService : Service() {
     private fun tick() {
         val now = SystemClock.elapsedRealtime()
         val screenOn = powerManager.isInteractive
-        val foreground = usageRepository.detectForegroundPackage(now)
-        val result = MonitorEngine.tick(now, screenOn, foreground)
+        val foreground = usageRepository.detectForegroundPackage()
+        val dailyUsage = usageRepository.getTodayUsageByPackageNow()
+        val result = MonitorEngine.tick(now, screenOn, foreground, dailyUsage)
         handleTickResult(result)
     }
 
     private fun scheduleNextTick() {
         val screenOn = powerManager.isInteractive
+        if (!screenOn) return // 息屏停止轮询，由屏幕亮起广播恢复
         val activePackage = MonitorEngine.state.value.activePackage
-        val delayMillis = when {
-            !screenOn -> 5_000L
-            activePackage != null -> 1_000L
-            else -> 2_000L
-        }
+        val delayMillis = if (activePackage != null) 1_000L else 2_000L
         handler.postDelayed(tickRunnable, delayMillis)
     }
 
@@ -99,9 +118,21 @@ class MonitorService : Service() {
             sendWarningNotification(packageName)
         }
 
+        result.dailyExhaustedPackage?.let { packageName ->
+            if (!MonitorEngine.isOverlayShowingFor(packageName)) {
+                startInterventionOverlay(packageName, OverlayMode.DAILY_EXHAUSTED)
+            }
+        }
+
         result.finalPackage?.let { packageName ->
             if (!MonitorEngine.isOverlayShowingFor(packageName)) {
                 startInterventionOverlay(packageName, OverlayMode.FINAL)
+            }
+        }
+
+        result.overdraftExhaustedPackage?.let { packageName ->
+            if (!MonitorEngine.isOverlayShowingFor(packageName)) {
+                startInterventionOverlay(packageName, OverlayMode.OVERDRAFT_EXHAUSTED)
             }
         }
 
@@ -132,10 +163,9 @@ class MonitorService : Service() {
             putExtra(InterventionOverlayService.EXTRA_PACKAGE, packageName)
             putExtra(InterventionOverlayService.EXTRA_MODE, mode)
             putExtra(InterventionOverlayService.EXTRA_REMAINING_MILLIS, remainingMillis)
-            putExtra(InterventionOverlayService.EXTRA_RECOVER_MODE, latestSettings.recoverMode)
-            putExtra(InterventionOverlayService.EXTRA_EXTENSIONS_LEFT, MonitorEngine.extensionsLeftFor(packageName))
-            putExtra(InterventionOverlayService.EXTRA_EXTENSION_SECONDS, latestSettings.extensionSeconds)
-            putExtra(InterventionOverlayService.EXTRA_FRICTION_SECONDS, latestSettings.frictionSeconds)
+            putExtra(InterventionOverlayService.EXTRA_FRICTION_SECONDS, latestSettings.ruleFor(packageName).frictionSeconds)
+            putExtra(InterventionOverlayService.EXTRA_LIMIT_MODE, latestSettings.mode)
+            putExtra(InterventionOverlayService.EXTRA_OVERDRAFT_DELAY_SECONDS, latestSettings.overdraftDelaySeconds)
         }
         startService(intent)
     }
@@ -234,6 +264,7 @@ class MonitorService : Service() {
     }
 
     companion object {
+        @Volatile var isRunning: Boolean = false
         private const val NOTIFICATION_ID_MONITOR = 1001
         private const val NOTIFICATION_ID_WARNING = 2001
         private const val CHANNEL_MONITOR = "monitor"
@@ -251,13 +282,39 @@ class MonitorService : Service() {
         fun stop(context: Context) {
             context.stopService(Intent(context, MonitorService::class.java))
         }
+
+        fun restart(context: Context) {
+            stop(context)
+            Handler(Looper.getMainLooper()).postDelayed({
+                context.startForegroundService(Intent(context, MonitorService::class.java))
+            }, 500L)
+        }
+
+        fun showTestOverlay(context: Context) {
+            val intent = Intent(context, InterventionOverlayService::class.java).apply {
+                putExtra(InterventionOverlayService.EXTRA_PACKAGE, "test")
+                putExtra(InterventionOverlayService.EXTRA_MODE, OverlayMode.TEST)
+            }
+            context.startService(intent)
+        }
+
+        fun showFinalOverlayTest(context: Context) {
+            val intent = Intent(context, InterventionOverlayService::class.java).apply {
+                putExtra(InterventionOverlayService.EXTRA_PACKAGE, "test")
+                putExtra(InterventionOverlayService.EXTRA_MODE, OverlayMode.FINAL)
+            }
+            context.startService(intent)
+        }
     }
 }
 
 object OverlayMode {
     const val FINAL = "final"
+    const val OVERDRAFT_EXHAUSTED = "overdraft_exhausted"
+    const val DAILY_EXHAUSTED = "daily_exhausted"
     const val COOLDOWN = "cooldown"
     const val FRICTION = "friction"
+    const val TEST = "test"
 }
 
 fun goHome(context: Context) {

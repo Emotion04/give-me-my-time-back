@@ -1,15 +1,13 @@
 # 还我时间（TimeGuard）
 
-一个 Android 屏幕时间统计 + 防沉迷应用。记录各 App 使用时长，并对指定 App 做连续使用管控。
+抖音快手小红书，豆瓣微博贴吧信息流！再也忍受不了互联网巨头对我们时间的占据。一个 Android 屏幕时间统计 + 防沉迷应用。记录各 App 使用时长，但我要做的，是与市面上的时间管理APP不同的是，我觉得现存的时间管理APP都太过鸡肋。让人感觉作者似乎从未沉迷于手机，也没有对如何摆脱手机成瘾有过思考。这个app真正的特点是市面上还没有的特色功能，对指定 App 做连续使用管控等。于是我直接自己写一个给自己用。
 
 ## 功能
-- **使用统计**：今日 / 近7天 / 近30天；饼图、条形图、排行榜、单 App 分时、屏幕总时长趋势
-- **连续使用管控**：额度（默认 15 分钟）+ 阶梯翻倍消耗（100%/150% 倍率，支持小数）
-- **恢复模式**：柔和·回充（离开按比例回充额度）/ 严格·冷却（到点须冷却再进入）
-- **干预**：提前提醒（80%/90% 档可自定义）+ 全屏柔和落地页三选一（延长/跳过/确定）+ 可选硬拦截 + 打开摩擦页（One Sec 式）
+
+TODO
 
 ## 技术栈
-Kotlin · Jetpack Compose (Material 3) · DataStore · UsageStatsManager · specialUse 前台服务 · 自绘图表
+Kotlin · Jetpack Compose (Material 3)
 
 ## 构建
 需要 Android Studio（含 JDK 21）+ Android SDK（platform android-37）。
@@ -26,11 +24,13 @@ APK 输出：`app/build/outputs/apk/debug/app-debug.apk`
 3. 「应用」页勾选要守护的 App
 
 ## 更新
-- **方式 A（推荐）**：安装 [Obtainium](https://github.com/ImranR98/Obtainium)，添加本仓库，自动检测 Releases 里的新 APK 并更新。
+- **方式 A**：安装 [Obtainium](https://github.com/ImranR98/Obtainium)，添加本仓库，自动检测 Releases 里的新 APK 并更新。
 - **方式 B**：在本仓库 Releases 页手动下载 APK 安装。
 
 ## 权限说明
 - `PACKAGE_USAGE_STATS`：统计各 App 使用时长、识别前台应用
-- `SYSTEM_ALERT_WINDOW`：正式限制/冷却/摩擦页的全屏落地
+- `SYSTEM_ALERT_WINDOW`：悬浮窗设置全屏落地
 - `POST_NOTIFICATIONS`：前台服务通知与提醒
 - 无障碍服务（可选）：硬拦截增强
+
+***无任何敏感权限，不会收集用户的任何信息。***

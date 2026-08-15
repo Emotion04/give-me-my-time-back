@@ -1,7 +1,6 @@
 package com.timec.app.ui
 
 import android.app.Application
-import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
 import android.os.PowerManager
@@ -9,13 +8,13 @@ import android.provider.Settings
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.timec.app.data.AppInfo
+import com.timec.app.data.AppRule
 import com.timec.app.data.AppSettings
 import com.timec.app.data.DayUsage
 import com.timec.app.data.SettingsRepository
 import com.timec.app.data.UsageRepository
 import com.timec.app.monitor.MonitorEngine
 import com.timec.app.monitor.MonitorService
-import com.timec.app.monitor.GuardAccessibilityService
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -100,93 +99,70 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         refreshPermissionState()
     }
 
-    // ---- settings ----
+    fun appLabel(packageName: String): String {
+        return apps.value.firstOrNull { it.packageName == packageName }?.label ?: packageName
+    }
+
+    // ---- 规则 / 应用 / 模板 ----
     fun setEnabled(value: Boolean) {
         viewModelScope.launch { settingsRepository.setEnabled(value) }
     }
 
-    fun setLimitMinutes(value: Int) {
-        viewModelScope.launch { settingsRepository.setLimitMinutes(value) }
+    fun setThemeIndex(value: Int) {
+        viewModelScope.launch { settingsRepository.setThemeIndex(value) }
     }
 
-    fun setTieredEnabled(value: Boolean) {
-        viewModelScope.launch { settingsRepository.setTieredEnabled(value) }
+    fun setMode(value: Int) {
+        viewModelScope.launch { settingsRepository.setMode(value) }
     }
 
-    fun setRate100x(value: Float) {
-        viewModelScope.launch { settingsRepository.setRate100x(value) }
+    fun setOverdraftDelaySeconds(value: Int) {
+        viewModelScope.launch { settingsRepository.setOverdraftDelaySeconds(value) }
     }
 
-    fun setRate150x(value: Float) {
-        viewModelScope.launch { settingsRepository.setRate150x(value) }
+    fun setDefaultRule(rule: AppRule) {
+        viewModelScope.launch { settingsRepository.setDefaultRule(rule) }
     }
 
-    fun setWarnPct(warnPct1: Int, warnPct2: Int) {
-        viewModelScope.launch { settingsRepository.setWarnPct(warnPct1, warnPct2) }
+    fun addApp(packageName: String) {
+        viewModelScope.launch { settingsRepository.addApp(packageName, settings.value.defaultRule) }
     }
 
-    fun setRecoverMode(value: Int) {
-        viewModelScope.launch { settingsRepository.setRecoverMode(value) }
+    fun addApps(packageNames: Set<String>) {
+        viewModelScope.launch { settingsRepository.addApps(packageNames, settings.value.defaultRule) }
     }
 
-    fun setBreakResetSeconds(value: Int) {
-        viewModelScope.launch { settingsRepository.setBreakResetSeconds(value) }
+    fun addAppsWithRule(packageNames: Set<String>, rule: AppRule) {
+        viewModelScope.launch { settingsRepository.addApps(packageNames, rule) }
     }
 
-    fun setEarnRule(workSeconds: Int, rewardSeconds: Int) {
-        viewModelScope.launch { settingsRepository.setEarnRule(workSeconds, rewardSeconds) }
+    fun removeApp(packageName: String) {
+        viewModelScope.launch { settingsRepository.removeApp(packageName) }
     }
 
-    fun setCooldownSeconds(value: Int) {
-        viewModelScope.launch { settingsRepository.setCooldownSeconds(value) }
+    fun updateAppRule(packageName: String, rule: AppRule) {
+        viewModelScope.launch { settingsRepository.addApp(packageName, rule) }
     }
 
-    fun setExtensionSeconds(value: Int) {
-        viewModelScope.launch { settingsRepository.setExtensionSeconds(value) }
+    fun saveTemplate(name: String, rule: AppRule) {
+        viewModelScope.launch { settingsRepository.setTemplate(name, rule) }
     }
 
-    fun setMaxExtensions(value: Int) {
-        viewModelScope.launch { settingsRepository.setMaxExtensions(value) }
+    fun deleteTemplate(name: String) {
+        viewModelScope.launch { settingsRepository.deleteTemplate(name) }
     }
 
-    fun setHardBlock(value: Boolean) {
-        viewModelScope.launch { settingsRepository.setHardBlock(value) }
+    fun applyTemplate(name: String, packageNames: Set<String>) {
+        viewModelScope.launch { settingsRepository.applyTemplate(name, packageNames) }
     }
 
-    fun setFrictionEnabled(value: Boolean) {
-        viewModelScope.launch { settingsRepository.setFrictionEnabled(value) }
-    }
-
-    fun setFrictionSeconds(value: Int) {
-        viewModelScope.launch { settingsRepository.setFrictionSeconds(value) }
-    }
-
-    fun togglePackage(packageName: String) {
-        val current = settings.value.selectedPackages
-        val next = if (packageName in current) current - packageName else current + packageName
-        viewModelScope.launch { settingsRepository.setSelectedPackages(next) }
-    }
-
+    // ---- 权限 ----
     fun hasUsageAccess(): Boolean = usageRepository.hasUsageAccess()
-
     fun hasOverlayPermission(): Boolean = Settings.canDrawOverlays(getApplication())
 
     fun isIgnoringBatteryOptimizations(): Boolean {
         val pm = getApplication<Application>().getSystemService(Context.POWER_SERVICE) as PowerManager
         return pm.isIgnoringBatteryOptimizations(getApplication<Application>().packageName)
-    }
-
-    fun isAccessibilityEnabled(): Boolean {
-        val context = getApplication<Application>()
-        val expected = ComponentName(context, GuardAccessibilityService::class.java).flattenToString()
-        val enabled = Settings.Secure.getString(
-            context.contentResolver,
-            Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES
-        ) ?: return false
-        return enabled.split(':').any { component ->
-            component.equals(expected, ignoreCase = true) ||
-                component.substringBefore('/').endsWith(GuardAccessibilityService::class.java.simpleName, ignoreCase = true)
-        }
     }
 
     fun openUsageAccessSettings() {
@@ -214,15 +190,20 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         )
     }
 
-    fun openAccessibilitySettings() {
-        getApplication<Application>().startActivity(
-            Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS)
-                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-        )
+    fun showTestOverlay() {
+        MonitorService.showTestOverlay(getApplication())
+    }
+
+    fun showFinalOverlayTest() {
+        MonitorService.showFinalOverlayTest(getApplication())
+    }
+
+    fun restartService() {
+        MonitorService.restart(getApplication())
     }
 
     private fun applyServiceState(settings: AppSettings) {
-        if (settings.enabled && settings.selectedPackages.isNotEmpty()) {
+        if (settings.enabled && settings.appRules.isNotEmpty()) {
             MonitorService.start(getApplication())
         } else {
             MonitorService.stop(getApplication())

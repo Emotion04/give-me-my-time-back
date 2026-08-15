@@ -11,6 +11,7 @@ import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -21,6 +22,7 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import com.timec.app.ui.screens.OverviewScreen
 import com.timec.app.ui.screens.SettingsScreen
 import com.timec.app.ui.screens.TargetAppsScreen
+import com.timec.app.ui.theme.TimeCTheme
 
 private data class TabItem(
     val label: String,
@@ -36,26 +38,29 @@ private val tabs = listOf(
 
 @Composable
 fun App(viewModel: AppViewModel = viewModel()) {
+    val settings by viewModel.settings.collectAsState()
     var selectedRoute by rememberSaveable { mutableStateOf("overview") }
-    Scaffold(
-        bottomBar = {
-            NavigationBar {
-                tabs.forEach { tab ->
-                    NavigationBarItem(
-                        selected = selectedRoute == tab.route,
-                        onClick = { selectedRoute = tab.route },
-                        icon = { Icon(tab.icon, contentDescription = tab.label) },
-                        label = { Text(tab.label) }
-                    )
+    TimeCTheme(themeIndex = settings.themeIndex) {
+        Scaffold(
+            bottomBar = {
+                NavigationBar {
+                    tabs.forEach { tab ->
+                        NavigationBarItem(
+                            selected = selectedRoute == tab.route,
+                            onClick = { selectedRoute = tab.route },
+                            icon = { Icon(tab.icon, contentDescription = tab.label) },
+                            label = { Text(tab.label) }
+                        )
+                    }
                 }
             }
-        }
-    ) { innerPadding ->
-        val modifier = Modifier.padding(innerPadding)
-        when (selectedRoute) {
-            "overview" -> OverviewScreen(viewModel, modifier)
-            "apps" -> TargetAppsScreen(viewModel, modifier)
-            "settings" -> SettingsScreen(viewModel, modifier)
+        ) { innerPadding ->
+            val modifier = Modifier.padding(innerPadding)
+            when (selectedRoute) {
+                "overview" -> OverviewScreen(viewModel, modifier)
+                "apps" -> TargetAppsScreen(viewModel, modifier)
+                "settings" -> SettingsScreen(viewModel, modifier)
+            }
         }
     }
 }
