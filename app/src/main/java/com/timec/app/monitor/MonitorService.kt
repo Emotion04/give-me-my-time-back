@@ -166,6 +166,10 @@ class MonitorService : Service() {
             putExtra(InterventionOverlayService.EXTRA_FRICTION_SECONDS, latestSettings.ruleFor(packageName).frictionSeconds)
             putExtra(InterventionOverlayService.EXTRA_LIMIT_MODE, latestSettings.ruleFor(packageName).mode)
             putExtra(InterventionOverlayService.EXTRA_OVERDRAFT_DELAY_SECONDS, latestSettings.overdraftDelaySeconds)
+            putExtra(InterventionOverlayService.EXTRA_FINAL_MESSAGE, latestSettings.finalMessage)
+            putExtra(InterventionOverlayService.EXTRA_BACKGROUND_INDEX, latestSettings.overlayBackground)
+            putExtra(InterventionOverlayService.EXTRA_EXTENSIONS_LEFT, MonitorEngine.extensionsLeftFor(packageName))
+            putExtra(InterventionOverlayService.EXTRA_EXTENSIONS_USED, MonitorEngine.extensionUsedCount(packageName))
         }
         startService(intent)
     }

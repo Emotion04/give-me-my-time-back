@@ -1,6 +1,7 @@
 package com.timec.app.ui.screens
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -18,6 +19,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Slider
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
@@ -30,6 +32,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -94,6 +97,41 @@ fun SettingsScreen(viewModel: AppViewModel, modifier: Modifier = Modifier) {
                 Column(Modifier.padding(16.dp)) {
                     Text("莫奈配色主题", style = MaterialTheme.typography.titleMedium)
                     ThemeSelector(settings.themeIndex, viewModel::setThemeIndex)
+                }
+            }
+        }
+
+        item { SectionHeader("个性化") }
+        item {
+            Card {
+                Column(Modifier.padding(16.dp)) {
+                    Text("正式限制提示语", style = MaterialTheme.typography.titleMedium)
+                    OutlinedTextField(
+                        value = settings.finalMessage,
+                        onValueChange = { viewModel.setFinalMessage(it) },
+                        modifier = Modifier.fillMaxWidth(),
+                        placeholder = { Text("到点后显示的提示语") }
+                    )
+                    Spacer(Modifier.size(12.dp))
+                    Text("悬浮窗背景", style = MaterialTheme.typography.titleMedium)
+                    Row(horizontalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.padding(top = 8.dp)) {
+                        listOf(
+                            Color(0xFF1B2A41), Color(0xFF122D28), Color(0xFF261A3A), Color(0xFF141416)
+                        ).forEachIndexed { index, color ->
+                            Box(
+                                Modifier
+                                    .size(36.dp)
+                                    .clip(CircleShape)
+                                    .background(color)
+                                    .clickable { viewModel.setOverlayBackground(index) }
+                                    .then(
+                                        if (settings.overlayBackground == index)
+                                            Modifier.border(2.dp, MaterialTheme.colorScheme.primary, CircleShape)
+                                        else Modifier
+                                    )
+                            )
+                        }
+                    }
                 }
             }
         }

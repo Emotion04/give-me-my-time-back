@@ -170,9 +170,12 @@ object MonitorEngine {
         val now = SystemClock.elapsedRealtime()
         when (choice) {
             FinalChoice.EXTEND -> {
-                session.extensionMillis += extensionSeconds(packageName) * 1000L
-                session.phase = SessionPhase.RUNNING
-                session.lastActiveRealtime = now
+                if (session.extensionCount < ruleFor(packageName).maxExtensions) {
+                    session.extensionMillis += extensionSeconds(packageName) * 1000L
+                    session.extensionCount++
+                    session.phase = SessionPhase.RUNNING
+                    session.lastActiveRealtime = now
+                }
             }
             FinalChoice.CONFIRM -> {
                 if (ruleFor(packageName).mode == 1) startCooldown(session) else resetSessionToIdle(session)
@@ -207,6 +210,16 @@ object MonitorEngine {
         }
         publishState()
         return ChoiceResult(true, false)
+    }
+
+    fun extensionsLeftFor(packageName: String): Int {
+        val session = sessions[packageName]
+        val max = ruleFor(packageName).maxExtensions
+        return if (session == null) max else (max - session.extensionCount).coerceAtLeast(0)
+    }
+
+    fun extensionUsedCount(packageName: String): Int {
+        return sessions[packageName]?.extensionCount ?: 0
     }
 
     fun chooseCooldownOverdraft(packageName: String): ChoiceResult {
@@ -278,6 +291,7 @@ object MonitorEngine {
         session.phase = SessionPhase.RUNNING
         session.sessionActiveMillis = 0L
         session.extensionMillis = 0L
+        session.extensionCount = 0
         session.overdraftConsumedMillis = 0L
         session.overdraftAllowanceMillis = 0L
         session.cooldownOverdraftConsumedMillis = 0L
@@ -334,6 +348,7 @@ object MonitorEngine {
         session.cooldownPenaltyMillis = penalty
         session.sessionActiveMillis = 0L
         session.extensionMillis = 0L
+        session.extensionCount = 0
         session.overdraftConsumedMillis = 0L
         session.overdraftAllowanceMillis = 0L
         session.cooldownOverdraftConsumedMillis = 0L
@@ -347,6 +362,7 @@ object MonitorEngine {
         session.phase = SessionPhase.IDLE
         session.sessionActiveMillis = 0L
         session.extensionMillis = 0L
+        session.extensionCount = 0
         session.overdraftConsumedMillis = 0L
         session.overdraftAllowanceMillis = 0L
         session.cooldownOverdraftConsumedMillis = 0L
@@ -400,6 +416,7 @@ object MonitorEngine {
         var phase: SessionPhase = SessionPhase.IDLE
         var sessionActiveMillis: Long = 0L
         var extensionMillis: Long = 0L
+        var extensionCount: Int = 0
         var overdraftConsumedMillis: Long = 0L
         var overdraftAllowanceMillis: Long = 0L
         var cooldownOverdraftConsumedMillis: Long = 0L

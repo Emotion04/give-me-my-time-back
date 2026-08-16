@@ -1,6 +1,14 @@
 package com.timec.app.ui.screens
 
 import androidx.activity.compose.BackHandler
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.slideOutHorizontally
+import androidx.compose.animation.togetherWith
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -19,6 +27,7 @@ import androidx.compose.material.icons.outlined.Add
 import androidx.compose.material.icons.outlined.ArrowBack
 import androidx.compose.material.icons.outlined.Delete
 import androidx.compose.material.icons.outlined.Layers
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.Checkbox
@@ -38,6 +47,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import com.timec.app.data.AppInfo
 import com.timec.app.data.AppRule
@@ -68,41 +78,55 @@ fun TargetAppsScreen(viewModel: AppViewModel, modifier: Modifier = Modifier) {
         }
     }
 
-    when (val n = nav) {
-        is AppsNav.List -> GuardedList(viewModel, modifier) { nav = it }
-        is AppsNav.Picker -> AppPicker(viewModel, modifier, onBack = { nav = AppsNav.List })
-        is AppsNav.Edit -> {
-            val settings by viewModel.settings.collectAsState()
-            RuleScreen(
-                title = viewModel.appLabel(n.pkg),
-                initial = settings.appRules[n.pkg] ?: settings.defaultRule,
-                onSave = { viewModel.updateAppRule(n.pkg, it); nav = AppsNav.List },
-                onBack = { nav = AppsNav.List },
-                modifier = modifier
-            )
+    AnimatedContent(
+        targetState = nav,
+        transitionSpec = {
+            val forward = depthOf(targetState) > depthOf(initialState)
+            val spec = tween<IntOffset>(durationMillis = 300, easing = FastOutSlowInEasing)
+            if (forward) {
+                (slideInHorizontally(spec) { it } + fadeIn()) togetherWith (slideOutHorizontally(spec) { -it / 3 } + fadeOut())
+            } else {
+                (slideInHorizontally(spec) { -it } + fadeIn()) togetherWith (slideOutHorizontally(spec) { it / 3 } + fadeOut())
+            }
+        },
+        label = "appsNav"
+    ) { n ->
+        when (n) {
+            is AppsNav.List -> GuardedList(viewModel, modifier) { nav = it }
+            is AppsNav.Picker -> AppPicker(viewModel, modifier, onBack = { nav = AppsNav.List })
+            is AppsNav.Edit -> {
+                val settings by viewModel.settings.collectAsState()
+                RuleScreen(
+                    title = viewModel.appLabel(n.pkg),
+                    initial = settings.appRules[n.pkg] ?: settings.defaultRule,
+                    onSave = { viewModel.updateAppRule(n.pkg, it); nav = AppsNav.List },
+                    onBack = { nav = AppsNav.List },
+                    modifier = modifier
+                )
+            }
+            is AppsNav.EditDefault -> {
+                val settings by viewModel.settings.collectAsState()
+                RuleScreen(
+                    title = "默认规则",
+                    initial = settings.defaultRule,
+                    onSave = { viewModel.setDefaultRule(it); nav = AppsNav.List },
+                    onBack = { nav = AppsNav.List },
+                    modifier = modifier
+                )
+            }
+            is AppsNav.Templates -> TemplateList(viewModel, modifier) { nav = it }
+            is AppsNav.EditTemplate -> {
+                val settings by viewModel.settings.collectAsState()
+                TemplateEditor(
+                    name = n.name,
+                    initial = n.name?.let { settings.templates[it] } ?: AppRule(),
+                    onSave = { name, rule -> viewModel.saveTemplate(name, rule); nav = AppsNav.Templates },
+                    onBack = { nav = AppsNav.Templates },
+                    modifier = modifier
+                )
+            }
+            is AppsNav.ApplyTemplate -> ApplyTemplate(viewModel, n.name, modifier) { nav = AppsNav.Templates }
         }
-        is AppsNav.EditDefault -> {
-            val settings by viewModel.settings.collectAsState()
-            RuleScreen(
-                title = "默认规则",
-                initial = settings.defaultRule,
-                onSave = { viewModel.setDefaultRule(it); nav = AppsNav.List },
-                onBack = { nav = AppsNav.List },
-                modifier = modifier
-            )
-        }
-        is AppsNav.Templates -> TemplateList(viewModel, modifier) { nav = it }
-        is AppsNav.EditTemplate -> {
-            val settings by viewModel.settings.collectAsState()
-            TemplateEditor(
-                name = n.name,
-                initial = n.name?.let { settings.templates[it] } ?: AppRule(),
-                onSave = { name, rule -> viewModel.saveTemplate(name, rule); nav = AppsNav.Templates },
-                onBack = { nav = AppsNav.Templates },
-                modifier = modifier
-            )
-        }
-        is AppsNav.ApplyTemplate -> ApplyTemplate(viewModel, n.name, modifier) { nav = AppsNav.Templates }
     }
 }
 
@@ -171,7 +195,7 @@ private fun GuardedList(viewModel: AppViewModel, modifier: Modifier, nav: (AppsN
                 )
             }
             items(groupEntries, key = { it.key }) { (pkg, rule) ->
-                Card(modifier = Modifier.fillMaxWidth().clickable { nav(AppsNav.Edit(pkg)) }) {
+                Card(modifier = Modifier.fillMaxWidth().animateItem().clickable { nav(AppsNav.Edit(pkg)) }) {
                     Row(
                         modifier = Modifier.padding(12.dp),
                         verticalAlignment = Alignment.CenterVertically
@@ -180,7 +204,8 @@ private fun GuardedList(viewModel: AppViewModel, modifier: Modifier, nav: (AppsN
                         Spacer(Modifier.width(12.dp))
                         Column(Modifier.weight(1f)) {
                             Text(viewModel.appLabel(pkg), style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.Bold)
-                            Text(ruleSummary(rule), style = MaterialTheme.typography.bodyMedium)
+                            val tpl = templateNames[pkg]
+                            Text((if (tpl != null) "模板：" + tpl + " · " else "") + ruleSummary(rule), style = MaterialTheme.typography.bodyMedium)
                         }
                         TextButton(onClick = { viewModel.removeApp(pkg) }) {
                             Icon(Icons.Outlined.Delete, contentDescription = "移除", tint = MaterialTheme.colorScheme.error)
@@ -336,10 +361,13 @@ private fun TemplateEditor(name: String?, initial: AppRule, onSave: (String, App
 
 @Composable
 private fun ApplyTemplate(viewModel: AppViewModel, name: String, modifier: Modifier, onBack: () -> Unit) {
+    val settings by viewModel.settings.collectAsState()
     val apps by viewModel.apps.collectAsState()
     var query by remember { mutableStateOf("") }
     var selected by remember { mutableStateOf(setOf<String>()) }
+    var showConfirm by remember { mutableStateOf(false) }
     val candidates = apps.filter { it.label.contains(query, ignoreCase = true) }
+    val templateNames = settings.appTemplateNames
 
     Column(modifier.fillMaxSize()) {
         TopBar("应用模板：" + name, onBack)
@@ -352,6 +380,7 @@ private fun ApplyTemplate(viewModel: AppViewModel, name: String, modifier: Modif
         )
         LazyColumn(Modifier.weight(1f), contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp)) {
             items(candidates, key = { it.packageName }) { app ->
+                val existing = templateNames[app.packageName]
                 Row(
                     modifier = Modifier.fillMaxWidth().clickable {
                         selected = if (app.packageName in selected) selected - app.packageName else selected + app.packageName
@@ -360,17 +389,46 @@ private fun ApplyTemplate(viewModel: AppViewModel, name: String, modifier: Modif
                 ) {
                     AppIcon(app.icon, Modifier.size(36.dp))
                     Spacer(Modifier.width(10.dp))
-                    Text(app.label, modifier = Modifier.weight(1f), style = MaterialTheme.typography.bodyLarge)
+                    Column(Modifier.weight(1f)) {
+                        Text(app.label, style = MaterialTheme.typography.bodyLarge)
+                        if (existing != null && existing != name) {
+                            Text("已应用：模板" + existing, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.tertiary)
+                        }
+                    }
                     Checkbox(checked = app.packageName in selected, onCheckedChange = null)
                 }
             }
         }
         Button(
-            onClick = { viewModel.applyTemplate(name, selected); onBack() },
+            onClick = {
+                val conflicts = selected.filter { templateNames[it] != null && templateNames[it] != name }
+                if (conflicts.isNotEmpty()) showConfirm = true
+                else { viewModel.applyTemplate(name, selected); onBack() }
+            },
             enabled = selected.isNotEmpty(),
             modifier = Modifier.fillMaxWidth().padding(16.dp)
         ) { Text("应用到选中（" + selected.size + "）") }
     }
+
+    if (showConfirm) {
+        AlertDialog(
+            onDismissRequest = { showConfirm = false },
+            confirmButton = {
+                TextButton(onClick = { viewModel.applyTemplate(name, selected); showConfirm = false; onBack() }) { Text("覆盖并应用") }
+            },
+            dismissButton = {
+                TextButton(onClick = { showConfirm = false }) { Text("取消") }
+            },
+            title = { Text("覆盖已有模板？") },
+            text = { Text("选中的部分应用已使用其他模板，应用后会被覆盖为“" + name + "”。") }
+        )
+    }
+}
+
+private fun depthOf(nav: AppsNav): Int = when (nav) {
+    is AppsNav.List -> 0
+    is AppsNav.Picker, is AppsNav.Edit, is AppsNav.EditDefault, is AppsNav.Templates -> 1
+    is AppsNav.EditTemplate, is AppsNav.ApplyTemplate -> 2
 }
 
 private fun ruleSummary(rule: AppRule): String {

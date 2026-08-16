@@ -1,5 +1,6 @@
 package com.timec.app.ui.screens
 
+import androidx.compose.animation.animateContentSize
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -13,6 +14,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
@@ -33,6 +35,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
@@ -44,6 +47,8 @@ import com.timec.app.ui.AppViewModel
 import com.timec.app.ui.components.AppIcon
 import com.timec.app.ui.components.BarChart
 import com.timec.app.ui.components.PieChart
+import com.timec.app.ui.components.TimelineBar
+import com.timec.app.ui.components.chartColor
 import kotlinx.coroutines.delay
 
 private val rangeOptions = listOf(
@@ -63,6 +68,7 @@ fun OverviewScreen(viewModel: AppViewModel, modifier: Modifier = Modifier) {
     val detailPackage by viewModel.detailPackage.collectAsState()
     val hourlyDetail by viewModel.hourlyDetail.collectAsState()
     val usageGranted by viewModel.usageGranted.collectAsState()
+    val appActivity by viewModel.appActivity.collectAsState()
 
     // 授权返回或回到前台时刷新
     val lifecycleOwner = LocalLifecycleOwner.current
@@ -160,8 +166,11 @@ fun OverviewScreen(viewModel: AppViewModel, modifier: Modifier = Modifier) {
                 description = "前 6 个应用"
             ) {
                 val data = topUsage(rangeUsage, apps, 6)
-                PieChart(data)
-                Legend(data)
+                PieChart(
+                    data.map { it.second to it.third },
+                    onClick = { idx -> data.getOrNull(idx)?.let { viewModel.openDetail(it.first) } }
+                )
+                Legend(data.map { it.second to it.third })
             }
         }
 
@@ -171,14 +180,45 @@ fun OverviewScreen(viewModel: AppViewModel, modifier: Modifier = Modifier) {
                 description = "使用时长最高的应用"
             ) {
                 val data = topUsage(rangeUsage, apps, 6)
-                BarChart(data)
-                Legend(data)
+                BarChart(
+                    data.map { it.second to it.third },
+                    onClick = { idx -> data.getOrNull(idx)?.let { viewModel.openDetail(it.first) } }
+                )
+                Legend(data.map { it.second to it.third })
+            }
+        }
+
+        item {
+            ChartCard(
+                title = "最近24小时活动",
+                description = "长条=长时间使用，碎片=频繁切换"
+            ) {
+                val act = appActivity.entries.sortedByDescending { it.value.totalMillis }.take(5)
+                if (act.isEmpty()) {
+                    Text("暂无数据", style = MaterialTheme.typography.bodyMedium)
+                } else {
+                    act.forEachIndexed { index, (pkg, activity) ->
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier.fillMaxWidth().padding(vertical = 5.dp)
+                        ) {
+                            Text(
+                                appLabel(apps, pkg),
+                                style = MaterialTheme.typography.bodyMedium,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                                modifier = Modifier.width(72.dp)
+                            )
+                            TimelineBar(activity.hourBuckets, chartColor(index), Modifier.weight(1f))
+                        }
+                    }
+                }
             }
         }
 
         item {
             Text("排行榜", style = MaterialTheme.typography.titleLarge)
-            Text("点按应用查看今日分时", style = MaterialTheme.typography.bodyMedium)
+            Text("点按应用查看 24 小时详情", style = MaterialTheme.typography.bodyMedium)
         }
 
         items(
@@ -190,6 +230,7 @@ fun OverviewScreen(viewModel: AppViewModel, modifier: Modifier = Modifier) {
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
+                    .animateItem()
                     .clickable { viewModel.openDetail(pkg) }
                     .padding(vertical = 8.dp),
                 verticalAlignment = Alignment.CenterVertically,
@@ -208,24 +249,22 @@ fun OverviewScreen(viewModel: AppViewModel, modifier: Modifier = Modifier) {
             confirmButton = {
                 TextButton(onClick = { viewModel.closeDetail() }) { Text("关闭") }
             },
-            title = { Text(appLabel(apps, pkg) + " · 今日分时") },
+            title = { Text(appLabel(apps, pkg) + " · 最近24小时") },
             text = {
-                val hours = hourlyDetail.toSortedMap()
-                if (hours.isEmpty()) {
-                    Text("今天暂无使用记录")
+                val act = appActivity[pkg]
+                if (act == null || act.totalMillis <= 0L) {
+                    Text("最近24小时暂无使用记录")
                 } else {
-                    Box(Modifier.height(300.dp)) {
-                        LazyColumn {
-                            items(hours.toList()) { (hour, millis) ->
-                                Row(
-                                    modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
-                                    horizontalArrangement = Arrangement.SpaceBetween
-                                ) {
-                                    Text(hour.toString() + ":00 时")
-                                    Text(formatDuration(millis))
-                                }
-                            }
+                    val colorIndex = rangeUsage.entries.sortedByDescending { it.value }.indexOfFirst { it.key == pkg }
+                    Column {
+                        Text("打开 " + act.openCount + " 次（单次超过3秒） · 共 " + formatDuration(act.totalMillis))
+                        if (act.openCount > 0) {
+                            Text("平均每次 " + formatDuration(act.totalMillis / act.openCount))
                         }
+                        Spacer(Modifier.height(12.dp))
+                        TimelineBar(act.hourBuckets, chartColor(if (colorIndex >= 0) colorIndex else 0), Modifier.fillMaxWidth())
+                        Spacer(Modifier.height(8.dp))
+                        Text("每个色块代表一小时，越宽表示使用越久", style = MaterialTheme.typography.bodySmall)
                     }
                 }
             }
@@ -244,7 +283,7 @@ private fun ActiveSessionCard(
     Card(colors = CardDefaults.cardColors(
         containerColor = MaterialTheme.colorScheme.primaryContainer
     )) {
-        Column(Modifier.padding(16.dp)) {
+        Column(Modifier.padding(16.dp).animateContentSize()) {
             Text("当前守护", style = MaterialTheme.typography.titleMedium)
             Text("已守护 " + guardedCount + " 个应用", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
             Spacer(Modifier.height(4.dp))
@@ -322,9 +361,9 @@ private fun topUsage(
     usage: Map<String, Long>,
     apps: List<AppInfo>,
     count: Int
-): List<Pair<String, Long>> {
+): List<Triple<String, String, Long>> {
     val sorted = usage.entries.sortedByDescending { it.value }.take(count)
-    return sorted.map { appLabel(apps, it.key) to it.value }
+    return sorted.map { Triple(it.key, appLabel(apps, it.key), it.value) }
 }
 
 private fun appInfo(apps: List<AppInfo>, packageName: String): AppInfo? {

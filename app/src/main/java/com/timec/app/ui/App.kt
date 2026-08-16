@@ -1,5 +1,6 @@
 package com.timec.app.ui
 
+import androidx.compose.animation.Crossfade
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Apps
@@ -56,10 +57,12 @@ fun App(viewModel: AppViewModel = viewModel()) {
             }
         ) { innerPadding ->
             val modifier = Modifier.padding(innerPadding)
-            when (selectedRoute) {
-                "overview" -> OverviewScreen(viewModel, modifier)
-                "apps" -> TargetAppsScreen(viewModel, modifier)
-                "settings" -> SettingsScreen(viewModel, modifier)
+            Crossfade(targetState = selectedRoute, label = "tabSwitch") { route ->
+                when (route) {
+                    "overview" -> OverviewScreen(viewModel, modifier)
+                    "apps" -> TargetAppsScreen(viewModel, modifier)
+                    "settings" -> SettingsScreen(viewModel, modifier)
+                }
             }
         }
     }

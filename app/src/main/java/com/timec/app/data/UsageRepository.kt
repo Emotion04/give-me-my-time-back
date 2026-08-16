@@ -20,6 +20,13 @@ data class DayUsage(
     val totalMillis: Long
 )
 
+data class AppActivity(
+    val packageName: String,
+    val hourBuckets: List<Long>,
+    val openCount: Int,
+    val totalMillis: Long
+)
+
 class UsageRepository(private val context: Context) {
     private var lastKnownForegroundPackage: String? = null
     private var foregroundInitialized = false
@@ -154,6 +161,54 @@ class UsageRepository(private val context: Context) {
             val segmentEnd = minOf(end, hourEnd)
             buckets[hour] += (segmentEnd - t).coerceAtLeast(0L)
             t = segmentEnd
+        }
+    }
+
+    fun getRecent24hActivityAll(): Map<String, AppActivity> {
+        val manager = usageStatsManager ?: return emptyMap()
+        val now = System.currentTimeMillis()
+        val start = now - 24 * HOUR_MILLIS
+        val hourBuckets = mutableMapOf<String, LongArray>()
+        val sessionStart = mutableMapOf<String, Long>()
+        val openCount = mutableMapOf<String, Int>()
+        val event = UsageEvents.Event()
+        try {
+            val events = manager.queryEvents(start, now)
+            while (events.hasNextEvent()) {
+                events.getNextEvent(event)
+                val pkg = event.packageName ?: continue
+                when (event.eventType) {
+                    UsageEvents.Event.ACTIVITY_RESUMED,
+                    UsageEvents.Event.MOVE_TO_FOREGROUND -> sessionStart[pkg] = event.timeStamp
+                    UsageEvents.Event.ACTIVITY_PAUSED,
+                    UsageEvents.Event.MOVE_TO_BACKGROUND -> {
+                        val s = sessionStart.remove(pkg) ?: continue
+                        addToWindowBuckets(hourBuckets.getOrPut(pkg) { LongArray(24) }, s, event.timeStamp, start)
+                        if (event.timeStamp - s >= 3_000L) openCount[pkg] = (openCount[pkg] ?: 0) + 1
+                    }
+                }
+            }
+            sessionStart.forEach { (pkg, s) ->
+                addToWindowBuckets(hourBuckets.getOrPut(pkg) { LongArray(24) }, s, now, start)
+                if (now - s >= 3_000L) openCount[pkg] = (openCount[pkg] ?: 0) + 1
+            }
+        } catch (_: Exception) {
+        }
+        return hourBuckets.mapValues { (pkg, arr) ->
+            AppActivity(pkg, arr.toList(), openCount[pkg] ?: 0, arr.sum())
+        }.filterValues { it.totalMillis > 0 }
+    }
+
+    private fun addToWindowBuckets(buckets: LongArray, from: Long, to: Long, windowStart: Long) {
+        var t = from.coerceAtLeast(windowStart)
+        val end = to
+        while (t < end) {
+            val idx = ((t - windowStart) / HOUR_MILLIS).toInt()
+            if (idx < 0 || idx >= buckets.size) break
+            val slotEnd = windowStart + (idx + 1) * HOUR_MILLIS
+            val segEnd = minOf(end, slotEnd)
+            buckets[idx] += (segEnd - t).coerceAtLeast(0L)
+            t = segEnd
         }
     }
 

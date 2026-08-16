@@ -26,6 +26,10 @@ class InterventionOverlayService : Service() {
     private var frictionSeconds: Int = 4
     private var limitMode: Int = 1
     private var overdraftDelaySeconds: Int = 0
+    private var extensionsLeft: Int = -1
+    private var extensionsUsed: Int = 0
+    private var finalMessage: String = "你不是在被惩罚，而是在拿回选择权。"
+    private var backgroundIndex: Int = 0
     private var continueButton: Button? = null
     private var continueDelayRemaining: Int = 0
     private val handler = Handler(Looper.getMainLooper())
@@ -69,6 +73,10 @@ class InterventionOverlayService : Service() {
         frictionSeconds = intent?.getIntExtra(EXTRA_FRICTION_SECONDS, 4) ?: 4
         limitMode = intent?.getIntExtra(EXTRA_LIMIT_MODE, 1) ?: 1
         overdraftDelaySeconds = intent?.getIntExtra(EXTRA_OVERDRAFT_DELAY_SECONDS, 0) ?: 0
+        extensionsLeft = intent?.getIntExtra(EXTRA_EXTENSIONS_LEFT, -1) ?: -1
+        extensionsUsed = intent?.getIntExtra(EXTRA_EXTENSIONS_USED, 0) ?: 0
+        finalMessage = intent?.getStringExtra(EXTRA_FINAL_MESSAGE) ?: "你不是在被惩罚，而是在拿回选择权。"
+        backgroundIndex = intent?.getIntExtra(EXTRA_BACKGROUND_INDEX, 0) ?: 0
         if (packageName.isEmpty()) {
             stopSelf()
             return START_NOT_STICKY
@@ -99,7 +107,7 @@ class InterventionOverlayService : Service() {
             setPadding(dp(32), dp(40), dp(32), dp(40))
             background = GradientDrawable(
                 GradientDrawable.Orientation.TOP_BOTTOM,
-                intArrayOf(Color.rgb(27, 42, 65), Color.rgb(45, 82, 96))
+                backgroundColors(backgroundIndex)
             ).apply { cornerRadius = dp(24).toFloat() }
             isClickable = true
         }
@@ -125,7 +133,7 @@ class InterventionOverlayService : Service() {
         val message = TextView(this).apply {
             text = when (mode) {
                 OverlayMode.FRICTION -> "吸气……呼气……\n你真的需要现在打开吗？"
-                OverlayMode.FINAL -> "你不是在被惩罚，而是在拿回选择权。"
+                OverlayMode.FINAL -> if (limitMode == 0) extensionMessage(extensionsUsed) else finalMessage
                 OverlayMode.OVERDRAFT_EXHAUSTED -> "继续透支的代价会越来越大。"
                 OverlayMode.DAILY_EXHAUSTED -> "今天已经用够多了，明天再来吧。"
                 OverlayMode.TEST -> "能看到这个页面，说明悬浮窗权限和渲染都正常。"
@@ -160,10 +168,13 @@ class InterventionOverlayService : Service() {
                 })
             }
             OverlayMode.FINAL -> {
-                root.addView(createButton("加一分钟", Color.rgb(127, 209, 174)) {
-                    val r = MonitorEngine.choose(packageName, FinalChoice.EXTEND)
-                    finishOverlay(r.goHome)
-                })
+                if (extensionsLeft != 0) {
+                    val extendLabel = if (extensionsLeft > 0 && limitMode == 0) "加一分钟（剩" + extensionsLeft + "次）" else "加一分钟"
+                    root.addView(createButton(extendLabel, Color.rgb(127, 209, 174)) {
+                        val r = MonitorEngine.choose(packageName, FinalChoice.EXTEND)
+                        finishOverlay(r.goHome)
+                    })
+                }
                 if (limitMode == 1) {
                     val btn = createButton("继续（透支）", Color.rgb(230, 183, 106)) {
                         val r = MonitorEngine.choose(packageName, FinalChoice.CONTINUE)
@@ -277,6 +288,23 @@ class InterventionOverlayService : Service() {
         return "%02d:%02d".format(seconds / 60, seconds % 60)
     }
 
+    private fun extensionMessage(used: Int): String = when {
+        used <= 0 -> "时间到了，休息一下吧。"
+        used == 1 -> "已经延长一次了，差不多该放下了。"
+        used == 2 -> "第 3 次了！还在刷？"
+        used == 3 -> "已经是第 4 次了！眼睛不累吗？"
+        used == 4 -> "第 5 次！！手指停不下来了吗？"
+        used == 5 -> "第 6 次了！！！快放下手机！"
+        else -> "第 " + (used + 1) + " 次了！！！真的够了，快去干点别的！"
+    }
+
+    private fun backgroundColors(index: Int): IntArray = when (index) {
+        1 -> intArrayOf(Color.rgb(18, 45, 40), Color.rgb(34, 82, 68))
+        2 -> intArrayOf(Color.rgb(38, 26, 58), Color.rgb(82, 52, 108))
+        3 -> intArrayOf(Color.rgb(20, 20, 22), Color.rgb(50, 50, 54))
+        else -> intArrayOf(Color.rgb(27, 42, 65), Color.rgb(45, 82, 96))
+    }
+
     private fun dp(value: Int): Int = (value * resources.displayMetrics.density).toInt()
 
     companion object {
@@ -286,5 +314,9 @@ class InterventionOverlayService : Service() {
         const val EXTRA_FRICTION_SECONDS = "friction_seconds"
         const val EXTRA_LIMIT_MODE = "limit_mode"
         const val EXTRA_OVERDRAFT_DELAY_SECONDS = "overdraft_delay_seconds"
+        const val EXTRA_FINAL_MESSAGE = "final_message"
+        const val EXTRA_BACKGROUND_INDEX = "background_index"
+        const val EXTRA_EXTENSIONS_LEFT = "extensions_left"
+        const val EXTRA_EXTENSIONS_USED = "extensions_used"
     }
 }

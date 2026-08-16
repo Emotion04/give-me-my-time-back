@@ -7,6 +7,7 @@ import android.os.PowerManager
 import android.provider.Settings
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import com.timec.app.data.AppActivity
 import com.timec.app.data.AppInfo
 import com.timec.app.data.AppRule
 import com.timec.app.data.AppSettings
@@ -48,6 +49,9 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     private val _hourlyDetail = MutableStateFlow<Map<Int, Long>>(emptyMap())
     val hourlyDetail: StateFlow<Map<Int, Long>> = _hourlyDetail.asStateFlow()
 
+    private val _appActivity = MutableStateFlow<Map<String, AppActivity>>(emptyMap())
+    val appActivity: StateFlow<Map<String, AppActivity>> = _appActivity.asStateFlow()
+
     private val _usageGranted = MutableStateFlow(false)
     val usageGranted: StateFlow<Boolean> = _usageGranted.asStateFlow()
 
@@ -80,7 +84,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     fun openDetail(packageName: String) {
         _detailPackage.value = packageName
         viewModelScope.launch {
-            _hourlyDetail.value = usageRepository.getTodayHourly(packageName)
+            _appActivity.value = usageRepository.getRecent24hActivityAll()
         }
     }
 
@@ -97,6 +101,13 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         refreshApps()
         refreshRange()
         refreshPermissionState()
+        refreshActivity()
+    }
+
+    fun refreshActivity() {
+        viewModelScope.launch {
+            _appActivity.value = usageRepository.getRecent24hActivityAll()
+        }
     }
 
     fun appLabel(packageName: String): String {
@@ -114,6 +125,14 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
 
     fun setOverdraftDelaySeconds(value: Int) {
         viewModelScope.launch { settingsRepository.setOverdraftDelaySeconds(value) }
+    }
+
+    fun setFinalMessage(value: String) {
+        viewModelScope.launch { settingsRepository.setFinalMessage(value) }
+    }
+
+    fun setOverlayBackground(value: Int) {
+        viewModelScope.launch { settingsRepository.setOverlayBackground(value) }
     }
 
     fun setDefaultRule(rule: AppRule) {

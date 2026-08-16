@@ -16,6 +16,8 @@ class SettingsRepository(private val context: Context) {
         val enabled = booleanPreferencesKey("enabled")
         val themeIndex = intPreferencesKey("theme_index")
         val overdraftDelaySeconds = intPreferencesKey("overdraft_delay_seconds")
+        val finalMessage = stringPreferencesKey("final_message")
+        val overlayBackground = intPreferencesKey("overlay_background")
         val defaultRule = stringPreferencesKey("default_rule")
         val appRules = stringPreferencesKey("app_rules")
         val templates = stringPreferencesKey("templates")
@@ -27,6 +29,8 @@ class SettingsRepository(private val context: Context) {
             enabled = p[Keys.enabled] ?: true,
             themeIndex = p[Keys.themeIndex] ?: 0,
             overdraftDelaySeconds = p[Keys.overdraftDelaySeconds] ?: 0,
+            finalMessage = p[Keys.finalMessage] ?: "你不是在被惩罚，而是在拿回选择权。",
+            overlayBackground = p[Keys.overlayBackground] ?: 0,
             defaultRule = p[Keys.defaultRule]?.let(::appRuleFromJson) ?: AppRule(),
             appRules = p[Keys.appRules]?.let(::ruleMapFromJson) ?: emptyMap(),
             templates = p[Keys.templates]?.let(::ruleMapFromJson) ?: emptyMap(),
@@ -44,6 +48,14 @@ class SettingsRepository(private val context: Context) {
 
     suspend fun setOverdraftDelaySeconds(value: Int) {
         context.settingsDataStore.edit { it[Keys.overdraftDelaySeconds] = value.coerceIn(0, 300) }
+    }
+
+    suspend fun setFinalMessage(value: String) {
+        context.settingsDataStore.edit { it[Keys.finalMessage] = value }
+    }
+
+    suspend fun setOverlayBackground(value: Int) {
+        context.settingsDataStore.edit { it[Keys.overlayBackground] = value.coerceIn(0, 10) }
     }
 
     suspend fun setDefaultRule(rule: AppRule) {

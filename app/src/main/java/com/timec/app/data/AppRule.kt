@@ -12,6 +12,8 @@ data class AppRule(
     val cooldownMinutes: Int = 30,
     val cooldownPenaltyMinutes: Int = 5,
     val extensionSeconds: Int = 60,
+    // 加一分钟的次数上限（0 = 不允许延长）
+    val maxExtensions: Int = 3,
     val warnPct1: Int = 80,
     val warnPct2: Int = 90,
     val frictionEnabled: Boolean = false,
@@ -27,6 +29,7 @@ fun AppRule.toJson(): String = JSONObject().apply {
     put("c", cooldownMinutes)
     put("p", cooldownPenaltyMinutes)
     put("e", extensionSeconds)
+    put("mx", maxExtensions)
     put("w1", warnPct1)
     put("w2", warnPct2)
     put("fr", frictionEnabled)
@@ -44,6 +47,7 @@ fun appRuleFromJson(json: String): AppRule = try {
         cooldownMinutes = o.optInt("c", 30),
         cooldownPenaltyMinutes = o.optInt("p", 5),
         extensionSeconds = o.optInt("e", 60),
+        maxExtensions = o.optInt("mx", 3),
         warnPct1 = o.optInt("w1", 80),
         warnPct2 = o.optInt("w2", 90),
         frictionEnabled = o.optBoolean("fr", false),
