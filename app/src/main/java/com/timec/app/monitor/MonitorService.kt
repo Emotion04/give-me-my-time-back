@@ -89,6 +89,7 @@ class MonitorService : Service() {
 
     override fun onDestroy() {
         isRunning = false
+        TimerOverlayService.stop(this)
         try { unregisterReceiver(screenReceiver) } catch (_: Exception) {}
         handler.removeCallbacks(tickRunnable)
         serviceScope.cancel()
@@ -150,6 +151,20 @@ class MonitorService : Service() {
             if (!MonitorEngine.isOverlayShowingFor(packageName)) {
                 startInterventionOverlay(packageName, OverlayMode.FRICTION)
             }
+        }
+
+        updateWidgetVisibility()
+    }
+
+    private fun updateWidgetVisibility() {
+        val screenOn = powerManager.isInteractive
+        val fg = MonitorEngine.state.value.foregroundPackage
+        val show = latestSettings.widgetEnabled && screenOn &&
+            (latestSettings.widgetAllApps || (fg != null && fg in latestSettings.appRules.keys))
+        if (show && !TimerOverlayService.overlayVisible) {
+            TimerOverlayService.start(this)
+        } else if (!show && TimerOverlayService.overlayVisible) {
+            TimerOverlayService.stop(this)
         }
     }
 

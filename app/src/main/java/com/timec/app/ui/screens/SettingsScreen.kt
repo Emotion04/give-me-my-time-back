@@ -18,6 +18,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Slider
@@ -39,6 +40,7 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
+import com.timec.app.monitor.TimerMetrics
 import com.timec.app.ui.AppViewModel
 import com.timec.app.ui.theme.themeNames
 
@@ -98,6 +100,97 @@ fun SettingsScreen(viewModel: AppViewModel, modifier: Modifier = Modifier) {
                     Text("莫奈配色主题", style = MaterialTheme.typography.titleMedium)
                     ThemeSelector(settings.themeIndex, viewModel::setThemeIndex)
                 }
+            }
+        }
+
+        item { SectionHeader("悬浮计时窗") }
+        item {
+            SettingToggle(
+                title = "启用悬浮计时窗",
+                subtitle = "亮屏时显示可拖动的小计时窗，点击切换指标；仅在守护清单应用（或清单中的“全部应用”）下显示",
+                checked = settings.widgetEnabled,
+                onCheckedChange = viewModel::setWidgetEnabled
+            )
+        }
+        item {
+            SettingToggle(
+                title = "所有应用都显示",
+                subtitle = "开启后不再限定守护清单，任何应用前台时都显示",
+                checked = settings.widgetAllApps,
+                onCheckedChange = viewModel::setWidgetAllApps
+            )
+        }
+        item {
+            Card {
+                Column(Modifier.padding(16.dp)) {
+                    Text("显示指标（点击悬浮窗循环切换）", style = MaterialTheme.typography.titleMedium)
+                    TimerMetrics.all.forEach { (id, label) ->
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable { viewModel.toggleWidgetMetric(id, id !in settings.widgetMetrics) }
+                                .padding(vertical = 8.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(label, modifier = Modifier.weight(1f), style = MaterialTheme.typography.bodyLarge)
+                            if (id in settings.widgetMetrics) {
+                                Text("✓", color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Bold)
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        item {
+            Card {
+                Column(Modifier.padding(16.dp)) {
+                    Text("不透明度：" + settings.widgetOpacity + "%", style = MaterialTheme.typography.titleMedium)
+                    Slider(
+                        value = settings.widgetOpacity.toFloat(),
+                        onValueChange = { v -> viewModel.setWidgetOpacity(Math.round(v)) },
+                        valueRange = 30f..100f
+                    )
+                    Spacer(Modifier.size(8.dp))
+                    Text("字号", style = MaterialTheme.typography.titleMedium)
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.padding(top = 8.dp)) {
+                        listOf("小", "中", "大").forEachIndexed { index, label ->
+                            FilterChip(
+                                selected = settings.widgetFontSize == index,
+                                onClick = { viewModel.setWidgetFontSize(index) },
+                                label = { Text(label) }
+                            )
+                        }
+                    }
+                }
+            }
+        }
+        item {
+            Card {
+                Column(Modifier.padding(16.dp)) {
+                    Text("“本次亮屏连续”重置阈值（息屏超过该秒数即重新计时）", style = MaterialTheme.typography.titleMedium)
+                    Slider(
+                        value = settings.screenOffResetThresholdSeconds.toFloat(),
+                        onValueChange = { v -> viewModel.setScreenOffResetThresholdSeconds(Math.round(v)) },
+                        valueRange = 0f..3600f
+                    )
+                    Text(settings.screenOffResetThresholdSeconds.toString() + " 秒", style = MaterialTheme.typography.bodyMedium)
+                    Spacer(Modifier.size(8.dp))
+                    Text("对比基准（“对比上周期”指标）", style = MaterialTheme.typography.titleMedium)
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.padding(top = 8.dp)) {
+                        listOf("昨日", "上周", "上月").forEachIndexed { index, label ->
+                            FilterChip(
+                                selected = settings.widgetComparePeriod == index,
+                                onClick = { viewModel.setWidgetComparePeriod(index) },
+                                label = { Text(label) }
+                            )
+                        }
+                    }
+                }
+            }
+        }
+        item {
+            Button(onClick = { viewModel.toggleTimerWidgetPreview() }, modifier = Modifier.fillMaxWidth()) {
+                Text("预览/隐藏悬浮计时窗")
             }
         }
 

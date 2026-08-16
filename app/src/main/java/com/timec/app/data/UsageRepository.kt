@@ -72,6 +72,49 @@ class UsageRepository(private val context: Context) {
             .associate { it.packageName to it.totalTimeInForeground }
     }
 
+    fun getTotalTodayNow(): Long = usageTotal(startOfDay(System.currentTimeMillis()), System.currentTimeMillis())
+
+    fun getTotalYesterday(): Long {
+        val today = startOfDay(System.currentTimeMillis())
+        return usageTotal(today - DAY_MILLIS, today - 1)
+    }
+
+    fun getTotalWeekNow(): Long = usageTotal(startOfWeek(System.currentTimeMillis()), System.currentTimeMillis())
+
+    fun getTotalPrevWeek(): Long {
+        val thisWeek = startOfWeek(System.currentTimeMillis())
+        return usageTotal(thisWeek - 7 * DAY_MILLIS, thisWeek - 1)
+    }
+
+    fun getTotalMonthNow(): Long = usageTotal(startOfMonth(System.currentTimeMillis()), System.currentTimeMillis())
+
+    fun getTotalPrevMonth(): Long {
+        val thisMonth = startOfMonth(System.currentTimeMillis())
+        val cal = Calendar.getInstance()
+        cal.timeInMillis = thisMonth
+        cal.add(Calendar.MONTH, -1)
+        return usageTotal(cal.timeInMillis, thisMonth - 1)
+    }
+
+    // 0=日 1=周 2=月，返回较上周期的变化比例（如 0.12 = +12%），无上期数据返回 null
+    fun getPeriodComparison(period: Int): Float? {
+        val cur: Long
+        val prev: Long
+        when (period) {
+            1 -> { cur = getTotalWeekNow(); prev = getTotalPrevWeek() }
+            2 -> { cur = getTotalMonthNow(); prev = getTotalPrevMonth() }
+            else -> { cur = getTotalTodayNow(); prev = getTotalYesterday() }
+        }
+        if (prev <= 0L) return null
+        return (cur - prev).toFloat() / prev.toFloat()
+    }
+
+    private fun usageTotal(begin: Long, end: Long): Long {
+        val manager = usageStatsManager ?: return 0L
+        return manager.queryUsageStats(UsageStatsManager.INTERVAL_DAILY, begin, end)
+            .sumOf { it.totalTimeInForeground }
+    }
+
     suspend fun getTotalToday(): Long = withContext(Dispatchers.IO) {
         getTodayUsageByPackage().values.sum()
     }
@@ -242,6 +285,29 @@ class UsageRepository(private val context: Context) {
     private fun startOfDay(time: Long): Long {
         val cal = Calendar.getInstance()
         cal.timeInMillis = time
+        cal.set(Calendar.HOUR_OF_DAY, 0)
+        cal.set(Calendar.MINUTE, 0)
+        cal.set(Calendar.SECOND, 0)
+        cal.set(Calendar.MILLISECOND, 0)
+        return cal.timeInMillis
+    }
+
+    private fun startOfWeek(time: Long): Long {
+        val cal = Calendar.getInstance()
+        cal.timeInMillis = time
+        cal.firstDayOfWeek = Calendar.MONDAY
+        cal.set(Calendar.DAY_OF_WEEK, Calendar.MONDAY)
+        cal.set(Calendar.HOUR_OF_DAY, 0)
+        cal.set(Calendar.MINUTE, 0)
+        cal.set(Calendar.SECOND, 0)
+        cal.set(Calendar.MILLISECOND, 0)
+        return cal.timeInMillis
+    }
+
+    private fun startOfMonth(time: Long): Long {
+        val cal = Calendar.getInstance()
+        cal.timeInMillis = time
+        cal.set(Calendar.DAY_OF_MONTH, 1)
         cal.set(Calendar.HOUR_OF_DAY, 0)
         cal.set(Calendar.MINUTE, 0)
         cal.set(Calendar.SECOND, 0)

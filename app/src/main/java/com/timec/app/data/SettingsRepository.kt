@@ -5,6 +5,7 @@ import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.intPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
+import androidx.datastore.preferences.core.stringSetPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
@@ -18,6 +19,15 @@ class SettingsRepository(private val context: Context) {
         val overdraftDelaySeconds = intPreferencesKey("overdraft_delay_seconds")
         val finalMessage = stringPreferencesKey("final_message")
         val overlayBackground = intPreferencesKey("overlay_background")
+        val widgetEnabled = booleanPreferencesKey("widget_enabled")
+        val widgetAllApps = booleanPreferencesKey("widget_all_apps")
+        val widgetMetrics = stringSetPreferencesKey("widget_metrics")
+        val widgetOpacity = intPreferencesKey("widget_opacity")
+        val widgetFontSize = intPreferencesKey("widget_font_size")
+        val screenOffResetThresholdSeconds = intPreferencesKey("screen_off_reset_threshold_seconds")
+        val widgetComparePeriod = intPreferencesKey("widget_compare_period")
+        val widgetPosX = intPreferencesKey("widget_pos_x")
+        val widgetPosY = intPreferencesKey("widget_pos_y")
         val defaultRule = stringPreferencesKey("default_rule")
         val appRules = stringPreferencesKey("app_rules")
         val templates = stringPreferencesKey("templates")
@@ -31,6 +41,15 @@ class SettingsRepository(private val context: Context) {
             overdraftDelaySeconds = p[Keys.overdraftDelaySeconds] ?: 0,
             finalMessage = p[Keys.finalMessage] ?: "你不是在被惩罚，而是在拿回选择权。",
             overlayBackground = p[Keys.overlayBackground] ?: 0,
+            widgetEnabled = p[Keys.widgetEnabled] ?: false,
+            widgetAllApps = p[Keys.widgetAllApps] ?: false,
+            widgetMetrics = p[Keys.widgetMetrics] ?: setOf("app_session"),
+            widgetOpacity = p[Keys.widgetOpacity] ?: 80,
+            widgetFontSize = p[Keys.widgetFontSize] ?: 1,
+            screenOffResetThresholdSeconds = p[Keys.screenOffResetThresholdSeconds] ?: 30,
+            widgetComparePeriod = p[Keys.widgetComparePeriod] ?: 0,
+            widgetPosX = p[Keys.widgetPosX] ?: -1,
+            widgetPosY = p[Keys.widgetPosY] ?: -1,
             defaultRule = p[Keys.defaultRule]?.let(::appRuleFromJson) ?: AppRule(),
             appRules = p[Keys.appRules]?.let(::ruleMapFromJson) ?: emptyMap(),
             templates = p[Keys.templates]?.let(::ruleMapFromJson) ?: emptyMap(),
@@ -56,6 +75,41 @@ class SettingsRepository(private val context: Context) {
 
     suspend fun setOverlayBackground(value: Int) {
         context.settingsDataStore.edit { it[Keys.overlayBackground] = value.coerceIn(0, 10) }
+    }
+
+    suspend fun setWidgetEnabled(value: Boolean) {
+        context.settingsDataStore.edit { it[Keys.widgetEnabled] = value }
+    }
+
+    suspend fun setWidgetAllApps(value: Boolean) {
+        context.settingsDataStore.edit { it[Keys.widgetAllApps] = value }
+    }
+
+    suspend fun setWidgetMetrics(value: Set<String>) {
+        context.settingsDataStore.edit { it[Keys.widgetMetrics] = value }
+    }
+
+    suspend fun setWidgetOpacity(value: Int) {
+        context.settingsDataStore.edit { it[Keys.widgetOpacity] = value.coerceIn(20, 100) }
+    }
+
+    suspend fun setWidgetFontSize(value: Int) {
+        context.settingsDataStore.edit { it[Keys.widgetFontSize] = value.coerceIn(0, 2) }
+    }
+
+    suspend fun setScreenOffResetThresholdSeconds(value: Int) {
+        context.settingsDataStore.edit { it[Keys.screenOffResetThresholdSeconds] = value.coerceIn(0, 3600) }
+    }
+
+    suspend fun setWidgetComparePeriod(value: Int) {
+        context.settingsDataStore.edit { it[Keys.widgetComparePeriod] = value.coerceIn(0, 2) }
+    }
+
+    suspend fun setWidgetPosition(x: Int, y: Int) {
+        context.settingsDataStore.edit {
+            it[Keys.widgetPosX] = x
+            it[Keys.widgetPosY] = y
+        }
     }
 
     suspend fun setDefaultRule(rule: AppRule) {

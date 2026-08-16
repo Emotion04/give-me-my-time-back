@@ -16,6 +16,7 @@ import com.timec.app.data.SettingsRepository
 import com.timec.app.data.UsageRepository
 import com.timec.app.monitor.MonitorEngine
 import com.timec.app.monitor.MonitorService
+import com.timec.app.monitor.TimerOverlayService
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -135,6 +136,37 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         viewModelScope.launch { settingsRepository.setOverlayBackground(value) }
     }
 
+    // ---- 悬浮计时窗 ----
+    fun setWidgetEnabled(value: Boolean) {
+        viewModelScope.launch { settingsRepository.setWidgetEnabled(value) }
+    }
+
+    fun setWidgetAllApps(value: Boolean) {
+        viewModelScope.launch { settingsRepository.setWidgetAllApps(value) }
+    }
+
+    fun toggleWidgetMetric(metric: String, enabled: Boolean) {
+        val current = settings.value.widgetMetrics
+        val next = if (enabled) current + metric else current - metric
+        viewModelScope.launch { settingsRepository.setWidgetMetrics(next) }
+    }
+
+    fun setWidgetOpacity(value: Int) {
+        viewModelScope.launch { settingsRepository.setWidgetOpacity(value) }
+    }
+
+    fun setWidgetFontSize(value: Int) {
+        viewModelScope.launch { settingsRepository.setWidgetFontSize(value) }
+    }
+
+    fun setScreenOffResetThresholdSeconds(value: Int) {
+        viewModelScope.launch { settingsRepository.setScreenOffResetThresholdSeconds(value) }
+    }
+
+    fun setWidgetComparePeriod(value: Int) {
+        viewModelScope.launch { settingsRepository.setWidgetComparePeriod(value) }
+    }
+
     fun setDefaultRule(rule: AppRule) {
         viewModelScope.launch { settingsRepository.setDefaultRule(rule) }
     }
@@ -211,6 +243,14 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
 
     fun showFinalOverlayTest() {
         MonitorService.showFinalOverlayTest(getApplication())
+    }
+
+    fun toggleTimerWidgetPreview() {
+        if (TimerOverlayService.overlayVisible) {
+            TimerOverlayService.stop(getApplication())
+        } else {
+            TimerOverlayService.start(getApplication())
+        }
     }
 
     fun restartService() {

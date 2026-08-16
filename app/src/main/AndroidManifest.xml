@@ -48,6 +48,10 @@
             android:name=".monitor.InterventionOverlayService"
             android:exported="false" />
 
+        <service
+            android:name=".monitor.TimerOverlayService"
+            android:exported="false" />
+
         <receiver
             android:name=".monitor.MonitorService$WarningActionReceiver"
             android:exported="false" />

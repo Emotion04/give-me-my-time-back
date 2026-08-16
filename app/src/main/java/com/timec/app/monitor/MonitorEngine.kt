@@ -27,7 +27,8 @@ data class MonitorUiState(
     val activePackage: String? = null,
     val activeSnapshot: SessionSnapshot? = null,
     val enabled: Boolean = true,
-    val guardedPackages: Set<String> = emptySet()
+    val guardedPackages: Set<String> = emptySet(),
+    val screenOnSessionMillis: Long = 0L
 )
 
 data class TickResult(
@@ -55,6 +56,10 @@ object MonitorEngine {
     private var overlayPackage: String? = null
     private var overlayMode: String? = null
     private var dailyUsedMap: Map<String, Long> = emptyMap()
+    private var prevScreenOn = false
+    private var screenOffAtRealtime = 0L
+    private var screenSessionStartRealtime = 0L
+    private var screenSessionMillis = 0L
 
     fun updateSettings(newSettings: AppSettings) {
         settings = newSettings
@@ -70,6 +75,7 @@ object MonitorEngine {
     ): TickResult {
         foregroundPackage = detectedForegroundPackage
         this.dailyUsedMap = dailyUsedMap
+        updateScreenSession(screenOn, nowRealtime)
 
         val warningPackages = mutableSetOf<String>()
         var finalPackage: String? = null
@@ -374,6 +380,24 @@ object MonitorEngine {
         session.frictionShown = false
     }
 
+    private fun updateScreenSession(screenOn: Boolean, nowRealtime: Long) {
+        if (screenOn) {
+            if (!prevScreenOn) {
+                val offDuration = nowRealtime - screenOffAtRealtime
+                if (screenSessionStartRealtime == 0L ||
+                    offDuration >= settings.screenOffResetThresholdSeconds * 1000L) {
+                    screenSessionStartRealtime = nowRealtime
+                }
+            }
+            screenSessionMillis = nowRealtime - screenSessionStartRealtime
+        } else {
+            if (prevScreenOn) {
+                screenOffAtRealtime = nowRealtime
+            }
+        }
+        prevScreenOn = screenOn
+    }
+
     private fun publishState() {
         val activePackage = foregroundPackage?.takeIf { it in settings.appRules.keys }
         val snapshot = activePackage?.let { pkg -> sessions[pkg]?.let { snapshotOf(it) } }
@@ -383,7 +407,8 @@ object MonitorEngine {
                 activePackage = activePackage,
                 activeSnapshot = snapshot,
                 enabled = settings.enabled,
-                guardedPackages = settings.appRules.keys
+                guardedPackages = settings.appRules.keys,
+                screenOnSessionMillis = screenSessionMillis
             )
         }
     }
