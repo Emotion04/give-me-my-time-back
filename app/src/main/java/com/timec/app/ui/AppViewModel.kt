@@ -265,8 +265,26 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         MonitorService.restart(getApplication())
     }
 
+    fun startGuard() {
+        viewModelScope.launch {
+            if (!settings.value.enabled) {
+                settingsRepository.setEnabled(true)
+            }
+            MonitorService.start(getApplication())
+        }
+    }
+
+    fun ensureWidget() {
+        val s = settings.value
+        if (!s.widgetEnabled) return
+        if (!Settings.canDrawOverlays(getApplication())) return
+        if (!TimerOverlayService.overlayVisible) {
+            TimerOverlayService.start(getApplication())
+        }
+    }
+
     private fun applyServiceState(settings: AppSettings) {
-        if (settings.enabled && settings.appRules.isNotEmpty()) {
+        if (settings.enabled) {
             MonitorService.start(getApplication())
         } else {
             MonitorService.stop(getApplication())
