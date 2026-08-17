@@ -26,6 +26,8 @@ class SettingsRepository(private val context: Context) {
         val widgetFontSize = intPreferencesKey("widget_font_size")
         val screenOffResetThresholdSeconds = intPreferencesKey("screen_off_reset_threshold_seconds")
         val widgetComparePeriod = intPreferencesKey("widget_compare_period")
+        val widgetMode = intPreferencesKey("widget_mode")
+        val widgetSingleMetric = stringPreferencesKey("widget_single_metric")
         val widgetPosX = intPreferencesKey("widget_pos_x")
         val widgetPosY = intPreferencesKey("widget_pos_y")
         val defaultRule = stringPreferencesKey("default_rule")
@@ -48,6 +50,8 @@ class SettingsRepository(private val context: Context) {
             widgetFontSize = p[Keys.widgetFontSize] ?: 1,
             screenOffResetThresholdSeconds = p[Keys.screenOffResetThresholdSeconds] ?: 30,
             widgetComparePeriod = p[Keys.widgetComparePeriod] ?: 0,
+            widgetMode = p[Keys.widgetMode] ?: 0,
+            widgetSingleMetric = p[Keys.widgetSingleMetric] ?: "app_session",
             widgetPosX = p[Keys.widgetPosX] ?: -1,
             widgetPosY = p[Keys.widgetPosY] ?: -1,
             defaultRule = p[Keys.defaultRule]?.let(::appRuleFromJson) ?: AppRule(),
@@ -103,6 +107,14 @@ class SettingsRepository(private val context: Context) {
 
     suspend fun setWidgetComparePeriod(value: Int) {
         context.settingsDataStore.edit { it[Keys.widgetComparePeriod] = value.coerceIn(0, 2) }
+    }
+
+    suspend fun setWidgetMode(value: Int) {
+        context.settingsDataStore.edit { it[Keys.widgetMode] = value.coerceIn(0, 1) }
+    }
+
+    suspend fun setWidgetSingleMetric(value: String) {
+        context.settingsDataStore.edit { it[Keys.widgetSingleMetric] = value }
     }
 
     suspend fun setWidgetPosition(x: Int, y: Int) {

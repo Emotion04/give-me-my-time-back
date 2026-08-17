@@ -77,6 +77,7 @@ class TimerOverlayService : Service() {
                 if (metricsChanged) {
                     metricIndex = metricIndex % enabledMetrics().size.coerceAtLeast(1)
                 }
+                updateText()
             }
         }
         showOverlay()
@@ -100,6 +101,18 @@ class TimerOverlayService : Service() {
     private fun enabledMetrics(): List<String> {
         val order = TimerMetrics.all.map { it.first }
         return order.filter { it in settings.widgetMetrics }
+    }
+
+    private fun currentMetricId(): String? {
+        return if (settings.widgetMode == 1) {
+            if (settings.widgetSingleMetric in TimerMetrics.all.map { it.first }) {
+                settings.widgetSingleMetric
+            } else {
+                TimerMetrics.APP_SESSION
+            }
+        } else {
+            enabledMetrics().takeIf { it.isNotEmpty() }?.let { it[metricIndex % it.size] }
+        }
     }
 
     private fun showOverlay() {
@@ -160,7 +173,7 @@ class TimerOverlayService : Service() {
                 MotionEvent.ACTION_UP -> {
                     if (moved) {
                         serviceScope.launch { settingsRepository.setWidgetPosition(p.x, p.y) }
-                    } else {
+                    } else if (settings.widgetMode == 0) {
                         cycleMetric()
                     }
                     true
@@ -198,13 +211,13 @@ class TimerOverlayService : Service() {
 
     private fun updateText() {
         val tv = textView ?: return
-        val metrics = enabledMetrics()
-        if (metrics.isEmpty()) {
+        val id = currentMetricId()
+        if (id == null) {
             tv.text = "--:--"
             return
         }
         refreshStatsIfNeeded()
-        tv.text = textFor(metrics[metricIndex % metrics.size])
+        tv.text = textFor(id)
     }
 
     private fun refreshStatsIfNeeded() {

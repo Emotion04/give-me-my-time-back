@@ -107,7 +107,7 @@ fun SettingsScreen(viewModel: AppViewModel, modifier: Modifier = Modifier) {
         item {
             SettingToggle(
                 title = "启用悬浮计时窗",
-                subtitle = "亮屏时显示可拖动的小计时窗，点击切换指标；仅在守护清单应用（或清单中的“全部应用”）下显示",
+                subtitle = "亮屏时显示可拖动的小计时窗；仅在守护清单应用（或清单中的“全部应用”）下显示",
                 checked = settings.widgetEnabled,
                 onCheckedChange = viewModel::setWidgetEnabled
             )
@@ -123,17 +123,41 @@ fun SettingsScreen(viewModel: AppViewModel, modifier: Modifier = Modifier) {
         item {
             Card {
                 Column(Modifier.padding(16.dp)) {
-                    Text("显示指标（点击悬浮窗循环切换）", style = MaterialTheme.typography.titleMedium)
+                    Text("显示方式", style = MaterialTheme.typography.titleMedium)
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.padding(top = 8.dp)) {
+                        listOf("循环切换", "固定单指标").forEachIndexed { index, label ->
+                            FilterChip(
+                                selected = settings.widgetMode == index,
+                                onClick = { viewModel.setWidgetMode(index) },
+                                label = { Text(label) }
+                            )
+                        }
+                    }
+                }
+            }
+        }
+        item {
+            Card {
+                Column(Modifier.padding(16.dp)) {
+                    Text(
+                        if (settings.widgetMode == 0) "显示指标（点击悬浮窗循环切换）" else "固定显示的指标（点击悬浮窗不切换）",
+                        style = MaterialTheme.typography.titleMedium
+                    )
                     TimerMetrics.all.forEach { (id, label) ->
+                        val isSingleMode = settings.widgetMode == 1
                         Row(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .clickable { viewModel.toggleWidgetMetric(id, id !in settings.widgetMetrics) }
+                                .clickable {
+                                    if (isSingleMode) viewModel.setWidgetSingleMetric(id)
+                                    else viewModel.toggleWidgetMetric(id, id !in settings.widgetMetrics)
+                                }
                                 .padding(vertical = 8.dp),
                             verticalAlignment = Alignment.CenterVertically
                         ) {
                             Text(label, modifier = Modifier.weight(1f), style = MaterialTheme.typography.bodyLarge)
-                            if (id in settings.widgetMetrics) {
+                            val selected = if (isSingleMode) settings.widgetSingleMetric == id else id in settings.widgetMetrics
+                            if (selected) {
                                 Text("✓", color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Bold)
                             }
                         }

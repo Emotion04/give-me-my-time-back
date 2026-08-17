@@ -167,6 +167,14 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         viewModelScope.launch { settingsRepository.setWidgetComparePeriod(value) }
     }
 
+    fun setWidgetMode(value: Int) {
+        viewModelScope.launch { settingsRepository.setWidgetMode(value) }
+    }
+
+    fun setWidgetSingleMetric(value: String) {
+        viewModelScope.launch { settingsRepository.setWidgetSingleMetric(value) }
+    }
+
     fun setDefaultRule(rule: AppRule) {
         viewModelScope.launch { settingsRepository.setDefaultRule(rule) }
     }

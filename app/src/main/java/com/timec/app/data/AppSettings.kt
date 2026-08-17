@@ -17,6 +17,9 @@ data class AppSettings(
     val widgetFontSize: Int = 1,
     val screenOffResetThresholdSeconds: Int = 30,
     val widgetComparePeriod: Int = 0,
+    // 显示方式：0 = 循环切换，1 = 固定单指标
+    val widgetMode: Int = 0,
+    val widgetSingleMetric: String = "app_session",
     val widgetPosX: Int = -1,
     val widgetPosY: Int = -1,
     val defaultRule: AppRule = AppRule(),
