@@ -159,8 +159,9 @@ class MonitorService : Service() {
     private fun updateWidgetVisibility() {
         val screenOn = powerManager.isInteractive
         val fg = MonitorEngine.state.value.foregroundPackage
+        val self = packageName
         val show = latestSettings.widgetEnabled && screenOn &&
-            (latestSettings.widgetAllApps || (fg != null && fg in latestSettings.appRules.keys))
+            (latestSettings.widgetAllApps || fg == self || (fg != null && fg in latestSettings.appRules.keys))
         if (show && !TimerOverlayService.overlayVisible) {
             TimerOverlayService.start(this)
         } else if (!show && TimerOverlayService.overlayVisible) {

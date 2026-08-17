@@ -18,6 +18,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
@@ -83,7 +84,7 @@ fun SettingsScreen(viewModel: AppViewModel, modifier: Modifier = Modifier) {
                 Column(Modifier.padding(16.dp)) {
                     Text("透支等待（秒）", style = MaterialTheme.typography.titleMedium)
                     Text("点“继续/透支”前需等待的秒数，0 = 立即可点", style = MaterialTheme.typography.bodyMedium)
-                    Slider(
+                    AppSlider(
                         value = settings.overdraftDelaySeconds.toFloat(),
                         onValueChange = { v -> viewModel.setOverdraftDelaySeconds(Math.round(v)) },
                         valueRange = 0f..60f
@@ -169,7 +170,7 @@ fun SettingsScreen(viewModel: AppViewModel, modifier: Modifier = Modifier) {
             Card {
                 Column(Modifier.padding(16.dp)) {
                     Text("不透明度：" + settings.widgetOpacity + "%", style = MaterialTheme.typography.titleMedium)
-                    Slider(
+                    AppSlider(
                         value = settings.widgetOpacity.toFloat(),
                         onValueChange = { v -> viewModel.setWidgetOpacity(Math.round(v)) },
                         valueRange = 30f..100f
@@ -192,7 +193,7 @@ fun SettingsScreen(viewModel: AppViewModel, modifier: Modifier = Modifier) {
             Card {
                 Column(Modifier.padding(16.dp)) {
                     Text("“本次亮屏连续”重置阈值（息屏超过该秒数即重新计时）", style = MaterialTheme.typography.titleMedium)
-                    Slider(
+                    AppSlider(
                         value = settings.screenOffResetThresholdSeconds.toFloat(),
                         onValueChange = { v -> viewModel.setScreenOffResetThresholdSeconds(Math.round(v)) },
                         valueRange = 0f..3600f
@@ -280,6 +281,28 @@ fun SettingsScreen(viewModel: AppViewModel, modifier: Modifier = Modifier) {
             }
         }
     }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun AppSlider(
+    value: Float,
+    onValueChange: (Float) -> Unit,
+    valueRange: ClosedFloatingPointRange<Float>
+) {
+    Slider(
+        value = value,
+        onValueChange = onValueChange,
+        valueRange = valueRange,
+        thumb = {
+            Box(
+                Modifier
+                    .size(16.dp)
+                    .clip(CircleShape)
+                    .background(MaterialTheme.colorScheme.primary)
+            )
+        }
+    )
 }
 
 @Composable

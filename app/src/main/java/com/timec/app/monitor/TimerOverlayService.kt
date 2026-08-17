@@ -9,6 +9,7 @@ import android.graphics.drawable.GradientDrawable
 import android.os.Handler
 import android.os.IBinder
 import android.os.Looper
+import android.provider.Settings
 import android.view.Gravity
 import android.view.MotionEvent
 import android.view.WindowManager
@@ -140,8 +141,11 @@ class TimerOverlayService : Service() {
         ).apply {
             gravity = Gravity.TOP or Gravity.START
             val dm = resources.displayMetrics
-            x = if (settings.widgetPosX >= 0) settings.widgetPosX else dm.widthPixels - dp(150)
-            y = if (settings.widgetPosY >= 0) settings.widgetPosY else dp(90)
+            val maxX = (dm.widthPixels - dp(48)).coerceAtLeast(0)
+            val minY = dp(40)
+            val maxY = (dm.heightPixels - dp(120)).coerceAtLeast(minY)
+            x = (if (settings.widgetPosX >= 0) settings.widgetPosX else dm.widthPixels - dp(160)).coerceIn(0, maxX)
+            y = (if (settings.widgetPosY >= 0) settings.widgetPosY else dp(90)).coerceIn(minY, maxY)
         }
 
         var downRawX = 0f
@@ -285,7 +289,11 @@ class TimerOverlayService : Service() {
         var overlayVisible = false
 
         fun start(context: Context) {
-            context.startService(Intent(context, TimerOverlayService::class.java))
+            if (Settings.canDrawOverlays(context)) {
+                context.startService(Intent(context, TimerOverlayService::class.java))
+            } else {
+                android.widget.Toast.makeText(context, "请先授予“悬浮窗”权限", android.widget.Toast.LENGTH_SHORT).show()
+            }
         }
 
         fun stop(context: Context) {
