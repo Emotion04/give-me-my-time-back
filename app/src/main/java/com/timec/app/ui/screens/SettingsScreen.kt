@@ -218,7 +218,7 @@ fun SettingsScreen(viewModel: AppViewModel, modifier: Modifier = Modifier) {
                     if (settings.widgetBackground == 3 && !ScreenColorSampler.isActive) {
                         Spacer(Modifier.size(8.dp))
                         Text(
-                            "“自动对比”需屏幕捕获授权：实时检测悬浮窗底层颜色，自动把文字调成黑色或白色保证可读。授权后每 30 秒采样一次（拖动时立即重采），会带来少量额外耗电。建议配合“全透明”背景使用。",
+                            "“自动对比”需屏幕捕获授权：实时（约每秒）检测悬浮窗底层颜色，自动把文字调成黑色或白色保证可读。屏幕捕获与系统任务栏的自适应不同——后者是系统级能力，第三方应用只能通过屏幕捕获读取像素，因此开启期间会持续镜像屏幕、有可见的额外耗电（关闭自动对比即停止）。建议配合“全透明”背景使用。",
                             style = MaterialTheme.typography.bodySmall
                         )
                         Spacer(Modifier.size(8.dp))

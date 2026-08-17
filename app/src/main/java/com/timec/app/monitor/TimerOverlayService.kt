@@ -235,12 +235,13 @@ class TimerOverlayService : Service() {
         if (settings.widgetBackground != 3) return
         if (!ScreenColorSampler.isActive) return
         val now = System.currentTimeMillis()
-        if (now - lastAutoSampleAt < 30_000L) return
+        if (now - lastAutoSampleAt < 1_000L) return
         val tv = textView ?: return
         val lp = params ?: return
-        val w = tv.width.coerceAtLeast(1)
-        val h = tv.height.coerceAtLeast(1)
-        val avg = ScreenColorSampler.sampleAverage(lp.x, lp.y, w, h) ?: return
+        val pad = dp(16)
+        val w = (tv.width + 2 * pad).coerceAtLeast(2)
+        val h = (tv.height + 2 * pad).coerceAtLeast(2)
+        val avg = ScreenColorSampler.sampleAverage(lp.x - pad, lp.y - pad, w, h) ?: return
         lastAutoSampleAt = now
         val lum = 0.299f * Color.red(avg) + 0.587f * Color.green(avg) + 0.114f * Color.blue(avg)
         val color = if (lum > 128f) Color.BLACK else Color.WHITE
