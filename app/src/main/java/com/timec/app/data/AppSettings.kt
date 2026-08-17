@@ -16,7 +16,7 @@ data class AppSettings(
     val widgetOpacity: Int = 80,
     // 字号（sp，无极调节）
     val widgetFontSize: Int = 14,
-    // 背景：0 黑底 1 白底 2 全透明 3 自动对比
+    // 背景：0 黑底 1 白底 2 全透明
     val widgetBackground: Int = 0,
     // 文字颜色：0 白 1 黑（透明背景 / 自动无授权时生效）
     val widgetTextColor: Int = 0,

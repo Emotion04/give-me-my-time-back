@@ -58,12 +58,13 @@ class TimerOverlayService : Service() {
     private var cmpValue: Float? = null
     private var lastStatsRefresh = 0L
     private var params: WindowManager.LayoutParams? = null
-    private var lastAutoColor: Int? = null
-    private var lastAutoSampleAt = 0L
+    private var flingRunnable: Runnable? = null
+    private var dragging = false
+    private var velocityX = 0f
+    private var velocityY = 0f
 
     private val tickRunnable = object : Runnable {
         override fun run() {
-            maybeSampleAuto()
             updateText()
             handler.postDelayed(this, 1_000L)
         }
@@ -98,8 +99,8 @@ class TimerOverlayService : Service() {
 
     override fun onDestroy() {
         handler.removeCallbacks(tickRunnable)
+        stopFling()
         serviceScope.cancel()
-        ColorSamplerService.stop(this)
         removeOverlay()
         super.onDestroy()
     }
@@ -154,37 +155,54 @@ class TimerOverlayService : Service() {
             y = (if (settings.widgetPosY >= 0) settings.widgetPosY else dp(90)).coerceIn(minY, maxY)
         }
 
-        var downRawX = 0f
-        var downRawY = 0f
-        var startX = p.x
-        var startY = p.y
+        var lastRawX = 0f
+        var lastRawY = 0f
+        var totalDx = 0f
+        var totalDy = 0f
         var moved = false
+        var lastMoveTime = System.currentTimeMillis()
         tv.setOnTouchListener { _, event ->
             when (event.action) {
                 MotionEvent.ACTION_DOWN -> {
-                    downRawX = event.rawX
-                    downRawY = event.rawY
-                    startX = p.x
-                    startY = p.y
+                    lastRawX = event.rawX
+                    lastRawY = event.rawY
+                    totalDx = 0f
+                    totalDy = 0f
                     moved = false
+                    dragging = false
+                    lastMoveTime = System.currentTimeMillis()
+                    velocityX = 0f
+                    velocityY = 0f
+                    stopFling()
                     true
                 }
                 MotionEvent.ACTION_MOVE -> {
-                    val dx = (event.rawX - downRawX).toInt()
-                    val dy = (event.rawY - downRawY).toInt()
-                    if (Math.abs(dx) + Math.abs(dy) > 20) moved = true
-                    if (moved) {
-                        p.x = startX + dx
-                        p.y = startY + dy
-                        try { windowManager.updateViewLayout(tv, p) } catch (_: Exception) {}
+                    val now = System.currentTimeMillis()
+                    val dt = (now - lastMoveTime).coerceAtLeast(1L)
+                    val dx = event.rawX - lastRawX
+                    val dy = event.rawY - lastRawY
+                    totalDx += dx
+                    totalDy += dy
+                    if (!moved && Math.abs(totalDx) + Math.abs(totalDy) > dp(8)) {
+                        moved = true
+                        dragging = true
                     }
+                    if (moved) {
+                        p.x += Math.round(dx)
+                        p.y += Math.round(dy)
+                        try { windowManager.updateViewLayout(tv, p) } catch (_: Exception) {}
+                        velocityX = 0.6f * velocityX + 0.4f * (dx.toFloat() * 1000f / dt)
+                        velocityY = 0.6f * velocityY + 0.4f * (dy.toFloat() * 1000f / dt)
+                    }
+                    lastRawX = event.rawX
+                    lastRawY = event.rawY
+                    lastMoveTime = now
                     true
                 }
                 MotionEvent.ACTION_UP -> {
+                    dragging = false
                     if (moved) {
-                        serviceScope.launch { settingsRepository.setWidgetPosition(p.x, p.y) }
-                        lastAutoSampleAt = 0L
-                        maybeSampleAuto()
+                        startFling()
                     } else if (settings.widgetMode == 0) {
                         cycleMetric()
                     }
@@ -211,45 +229,21 @@ class TimerOverlayService : Service() {
         tv.setPadding(m, m, m, m)
         (tv.background as? GradientDrawable)?.setColor(currentBgColor())
         tv.setTextColor(currentTextColor())
-        if (settings.widgetBackground != 3) {
-            ColorSamplerService.stop(this)
-        }
     }
 
     private fun currentBgColor(): Int = when (settings.widgetBackground) {
         1 -> Color.WHITE
-        2, 3 -> Color.TRANSPARENT
+        2 -> Color.TRANSPARENT
         else -> Color.rgb(18, 18, 22)
     }
 
     private fun currentTextColor(): Int = when (settings.widgetBackground) {
         0 -> Color.WHITE
         1 -> Color.BLACK
-        3 -> lastAutoColor ?: colorForIndex(settings.widgetTextColor)
         else -> colorForIndex(settings.widgetTextColor)
     }
 
     private fun colorForIndex(index: Int): Int = if (index == 1) Color.BLACK else Color.WHITE
-
-    private fun maybeSampleAuto() {
-        if (settings.widgetBackground != 3) return
-        if (!ScreenColorSampler.isActive) return
-        val now = System.currentTimeMillis()
-        if (now - lastAutoSampleAt < 1_000L) return
-        val tv = textView ?: return
-        val lp = params ?: return
-        val pad = dp(16)
-        val w = (tv.width + 2 * pad).coerceAtLeast(2)
-        val h = (tv.height + 2 * pad).coerceAtLeast(2)
-        val avg = ScreenColorSampler.sampleAverage(lp.x - pad, lp.y - pad, w, h) ?: return
-        lastAutoSampleAt = now
-        val lum = 0.299f * Color.red(avg) + 0.587f * Color.green(avg) + 0.114f * Color.blue(avg)
-        val color = if (lum > 128f) Color.BLACK else Color.WHITE
-        if (color != lastAutoColor) {
-            lastAutoColor = color
-            tv.setTextColor(color)
-        }
-    }
 
     private fun cycleMetric() {
         val metrics = enabledMetrics()
@@ -258,7 +252,78 @@ class TimerOverlayService : Service() {
         updateText()
     }
 
+    private fun startFling() {
+        stopFling()
+        val dm = resources.displayMetrics
+        val maxX = (dm.widthPixels - dp(48)).coerceAtLeast(0)
+        val minY = dp(40)
+        val maxY = (dm.heightPixels - dp(120)).coerceAtLeast(minY)
+        val frame = object : Runnable {
+            override fun run() {
+                val tv = textView ?: return
+                val lp = params ?: return
+                val vx = velocityX
+                val vy = velocityY
+                if (Math.abs(vx) + Math.abs(vy) < 60f) {
+                    snapToEdge()
+                    return
+                }
+                velocityX = vx * 0.90f
+                velocityY = vy * 0.90f
+                lp.x += Math.round(vx * 0.016f)
+                lp.y += Math.round(vy * 0.016f)
+                lp.x = lp.x.coerceIn(0, maxX)
+                lp.y = lp.y.coerceIn(minY, maxY)
+                if (lp.x <= 0 || lp.x >= maxX) velocityX = 0f
+                if (lp.y <= minY || lp.y >= maxY) velocityY = 0f
+                try { windowManager.updateViewLayout(tv, lp) } catch (_: Exception) {}
+                handler.postDelayed(this, 16L)
+            }
+        }
+        flingRunnable = frame
+        handler.post(frame)
+    }
+
+    private fun snapToEdge() {
+        stopFling()
+        val tv = textView ?: return
+        val lp = params ?: return
+        val dm = resources.displayMetrics
+        val maxX = (dm.widthPixels - dp(48)).coerceAtLeast(0)
+        val targetX = if (lp.x + tv.width / 2 < dm.widthPixels / 2) 0 else maxX
+        val startX = lp.x
+        val duration = 260L
+        val startTime = System.currentTimeMillis()
+        val anim = object : Runnable {
+            override fun run() {
+                val cur = params ?: return
+                val t = (System.currentTimeMillis() - startTime).toFloat() / duration.toFloat()
+                val eased = if (t >= 1f) 1f else 1f - (1f - t) * (1f - t) * (1f - t)
+                cur.x = Math.round(startX + (targetX - startX) * eased)
+                try { windowManager.updateViewLayout(tv, cur) } catch (_: Exception) {}
+                if (t < 1f) {
+                    handler.postDelayed(this, 16L)
+                } else {
+                    flingRunnable = null
+                    persistPosition(cur.x, cur.y)
+                }
+            }
+        }
+        flingRunnable = anim
+        handler.post(anim)
+    }
+
+    private fun stopFling() {
+        flingRunnable?.let { handler.removeCallbacks(it) }
+        flingRunnable = null
+    }
+
+    private fun persistPosition(x: Int, y: Int) {
+        serviceScope.launch { settingsRepository.setWidgetPosition(x, y) }
+    }
+
     private fun updateText() {
+        if (dragging) return
         val tv = textView ?: return
         val id = currentMetricId()
         if (id == null) {
@@ -273,10 +338,18 @@ class TimerOverlayService : Service() {
         val now = System.currentTimeMillis()
         if (now - lastStatsRefresh < 30_000L) return
         lastStatsRefresh = now
-        todayMillis = usageRepository.getTotalTodayNow()
-        weekMillis = usageRepository.getTotalWeekNow()
-        monthMillis = usageRepository.getTotalMonthNow()
-        cmpValue = usageRepository.getPeriodComparison(settings.widgetComparePeriod)
+        serviceScope.launch(Dispatchers.Default) {
+            val t = usageRepository.getTotalTodayNow()
+            val w = usageRepository.getTotalWeekNow()
+            val mo = usageRepository.getTotalMonthNow()
+            val c = usageRepository.getPeriodComparison(settings.widgetComparePeriod)
+            handler.post {
+                todayMillis = t
+                weekMillis = w
+                monthMillis = mo
+                cmpValue = c
+            }
+        }
     }
 
     private fun textFor(metric: String): String {

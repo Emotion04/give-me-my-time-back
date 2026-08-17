@@ -1,10 +1,5 @@
 package com.timec.app.ui.screens
 
-import android.app.Activity
-import android.content.Context
-import android.media.projection.MediaProjectionManager
-import androidx.activity.compose.rememberLauncherForActivityResult
-import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -35,21 +30,17 @@ import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
-import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
-import com.timec.app.monitor.ColorSamplerService
-import com.timec.app.monitor.ScreenColorSampler
 import com.timec.app.monitor.TimerMetrics
 import com.timec.app.ui.AppViewModel
 import com.timec.app.ui.theme.themeNames
@@ -58,20 +49,6 @@ import com.timec.app.ui.theme.themeNames
 fun SettingsScreen(viewModel: AppViewModel, modifier: Modifier = Modifier) {
     val settings by viewModel.settings.collectAsState()
     var permissionTick by remember { mutableIntStateOf(0) }
-    val context = LocalContext.current
-    val projectionLauncher = rememberLauncherForActivityResult(
-        ActivityResultContracts.StartActivityForResult()
-    ) { result ->
-        if (result.resultCode == Activity.RESULT_OK) {
-            val data = result.data
-            viewModel.setWidgetBackground(3)
-            ColorSamplerService.start(context, result.resultCode, data)
-        }
-    }
-    val launchProjection: () -> Unit = {
-        val mgr = context.getSystemService(Context.MEDIA_PROJECTION_SERVICE) as? MediaProjectionManager
-        mgr?.let { projectionLauncher.launch(it.createScreenCaptureIntent()) }
-    }
     val lifecycleOwner = LocalLifecycleOwner.current
 
     DisposableEffect(lifecycleOwner) {
@@ -201,32 +178,15 @@ fun SettingsScreen(viewModel: AppViewModel, modifier: Modifier = Modifier) {
                     Spacer(Modifier.size(8.dp))
                     Text("背景", style = MaterialTheme.typography.titleMedium)
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.padding(top = 8.dp)) {
-                        listOf("黑底", "白底", "全透明", "自动对比").forEachIndexed { index, label ->
+                        listOf("黑底", "白底", "全透明").forEachIndexed { index, label ->
                             FilterChip(
                                 selected = settings.widgetBackground == index,
-                                onClick = {
-                                    if (index == 3 && !ScreenColorSampler.isActive) {
-                                        launchProjection()
-                                    } else {
-                                        viewModel.setWidgetBackground(index)
-                                    }
-                                },
+                                onClick = { viewModel.setWidgetBackground(index) },
                                 label = { Text(label) }
                             )
                         }
                     }
-                    if (settings.widgetBackground == 3 && !ScreenColorSampler.isActive) {
-                        Spacer(Modifier.size(8.dp))
-                        Text(
-                            "“自动对比”需屏幕捕获授权：实时（约每秒）检测悬浮窗底层颜色，自动把文字调成黑色或白色保证可读。屏幕捕获与系统任务栏的自适应不同——后者是系统级能力，第三方应用只能通过屏幕捕获读取像素，因此开启期间会持续镜像屏幕、有可见的额外耗电（关闭自动对比即停止）。建议配合“全透明”背景使用。",
-                            style = MaterialTheme.typography.bodySmall
-                        )
-                        Spacer(Modifier.size(8.dp))
-                        Button(onClick = { launchProjection() }) {
-                            Text("授权屏幕检测")
-                        }
-                    }
-                    if (settings.widgetBackground == 2 || settings.widgetBackground == 3) {
+                    if (settings.widgetBackground == 2) {
                         Spacer(Modifier.size(8.dp))
                         Text("文字颜色", style = MaterialTheme.typography.titleMedium)
                         Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.padding(top = 8.dp)) {

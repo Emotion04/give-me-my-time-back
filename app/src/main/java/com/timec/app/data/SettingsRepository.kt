@@ -59,7 +59,7 @@ class SettingsRepository(private val context: Context) {
                     else -> old.coerceIn(10, 28)
                 }
             },
-            widgetBackground = p[Keys.widgetBackground] ?: 0,
+            widgetBackground = (p[Keys.widgetBackground] ?: 0).coerceIn(0, 2),
             widgetTextColor = p[Keys.widgetTextColor] ?: 0,
             widgetMargin = p[Keys.widgetMargin] ?: 10,
             screenOffResetThresholdSeconds = p[Keys.screenOffResetThresholdSeconds] ?: 30,
@@ -117,7 +117,7 @@ class SettingsRepository(private val context: Context) {
     }
 
     suspend fun setWidgetBackground(value: Int) {
-        context.settingsDataStore.edit { it[Keys.widgetBackground] = value.coerceIn(0, 3) }
+        context.settingsDataStore.edit { it[Keys.widgetBackground] = value.coerceIn(0, 2) }
     }
 
     suspend fun setWidgetTextColor(value: Int) {
