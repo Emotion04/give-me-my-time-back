@@ -22,6 +22,12 @@ data class AppSettings(
     val widgetTextColor: Int = 0,
     // 文字到背景边沿的边距（dp，四边等宽）
     val widgetMargin: Int = 10,
+    // 刷新间隔（秒，默认 1）
+    val widgetRefreshSeconds: Int = 1,
+    // 拖动惯性 0..10（越大越飘、松手滑得更远）
+    val widgetInertia: Int = 5,
+    // 各指标前缀（可自定义/留空/emoji）
+    val widgetMetricPrefixes: Map<String, String> = emptyMap(),
     val screenOffResetThresholdSeconds: Int = 30,
     val widgetComparePeriod: Int = 0,
     // 显示方式：0 = 循环切换，1 = 固定单指标

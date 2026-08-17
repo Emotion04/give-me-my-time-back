@@ -241,6 +241,49 @@ fun SettingsScreen(viewModel: AppViewModel, modifier: Modifier = Modifier) {
             }
         }
         item {
+            Card {
+                Column(Modifier.padding(16.dp)) {
+                    Text("刷新间隔：" + settings.widgetRefreshSeconds + " 秒", style = MaterialTheme.typography.titleMedium)
+                    Text("计时类指标（本次使用/亮屏连续）按此间隔刷新；统计类指标内部 30 秒缓存", style = MaterialTheme.typography.bodyMedium)
+                    AppSlider(
+                        value = settings.widgetRefreshSeconds.toFloat(),
+                        onValueChange = { v -> viewModel.setWidgetRefreshSeconds(Math.round(v)) },
+                        valueRange = 1f..10f
+                    )
+                }
+            }
+        }
+        item {
+            Card {
+                Column(Modifier.padding(16.dp)) {
+                    Text("拖动惯性：" + settings.widgetInertia, style = MaterialTheme.typography.titleMedium)
+                    Text("越小越跟手（贴近手指），越大越飘（拖起来先慢后快、松手滑得更远）", style = MaterialTheme.typography.bodyMedium)
+                    AppSlider(
+                        value = settings.widgetInertia.toFloat(),
+                        onValueChange = { v -> viewModel.setWidgetInertia(Math.round(v)) },
+                        valueRange = 0f..10f
+                    )
+                }
+            }
+        }
+        item {
+            Card {
+                Column(Modifier.padding(16.dp)) {
+                    Text("指标前缀（可留空，支持 emoji）", style = MaterialTheme.typography.titleMedium)
+                    TimerMetrics.all.forEach { (id, label) ->
+                        val current = settings.widgetMetricPrefixes[id] ?: TimerMetrics.defaultPrefix(id)
+                        OutlinedTextField(
+                            value = current,
+                            onValueChange = { viewModel.setWidgetMetricPrefix(id, it) },
+                            modifier = Modifier.fillMaxWidth().padding(top = 6.dp),
+                            label = { Text(label) },
+                            singleLine = true
+                        )
+                    }
+                }
+            }
+        }
+        item {
             Button(onClick = { viewModel.toggleTimerWidgetPreview() }, modifier = Modifier.fillMaxWidth()) {
                 Text("预览/隐藏悬浮计时窗")
             }

@@ -27,6 +27,9 @@ class SettingsRepository(private val context: Context) {
         val widgetBackground = intPreferencesKey("widget_background")
         val widgetTextColor = intPreferencesKey("widget_text_color")
         val widgetMargin = intPreferencesKey("widget_margin")
+        val widgetRefreshSeconds = intPreferencesKey("widget_refresh_seconds")
+        val widgetInertia = intPreferencesKey("widget_inertia")
+        val widgetMetricPrefixes = stringPreferencesKey("widget_metric_prefixes")
         val screenOffResetThresholdSeconds = intPreferencesKey("screen_off_reset_threshold_seconds")
         val widgetComparePeriod = intPreferencesKey("widget_compare_period")
         val widgetMode = intPreferencesKey("widget_mode")
@@ -62,6 +65,9 @@ class SettingsRepository(private val context: Context) {
             widgetBackground = (p[Keys.widgetBackground] ?: 0).coerceIn(0, 2),
             widgetTextColor = p[Keys.widgetTextColor] ?: 0,
             widgetMargin = p[Keys.widgetMargin] ?: 10,
+            widgetRefreshSeconds = (p[Keys.widgetRefreshSeconds] ?: 1).coerceIn(1, 10),
+            widgetInertia = (p[Keys.widgetInertia] ?: 5).coerceIn(0, 10),
+            widgetMetricPrefixes = p[Keys.widgetMetricPrefixes]?.let(::stringMapFromJson) ?: emptyMap(),
             screenOffResetThresholdSeconds = p[Keys.screenOffResetThresholdSeconds] ?: 30,
             widgetComparePeriod = p[Keys.widgetComparePeriod] ?: 0,
             widgetMode = p[Keys.widgetMode] ?: 0,
@@ -126,6 +132,18 @@ class SettingsRepository(private val context: Context) {
 
     suspend fun setWidgetMargin(value: Int) {
         context.settingsDataStore.edit { it[Keys.widgetMargin] = value.coerceIn(0, 24) }
+    }
+
+    suspend fun setWidgetRefreshSeconds(value: Int) {
+        context.settingsDataStore.edit { it[Keys.widgetRefreshSeconds] = value.coerceIn(1, 10) }
+    }
+
+    suspend fun setWidgetInertia(value: Int) {
+        context.settingsDataStore.edit { it[Keys.widgetInertia] = value.coerceIn(0, 10) }
+    }
+
+    suspend fun setWidgetMetricPrefixes(value: Map<String, String>) {
+        context.settingsDataStore.edit { it[Keys.widgetMetricPrefixes] = stringMapToJson(value) }
     }
 
     suspend fun setServiceManual(value: Boolean) {

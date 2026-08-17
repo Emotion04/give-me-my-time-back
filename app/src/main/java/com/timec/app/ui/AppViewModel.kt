@@ -179,6 +179,22 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         viewModelScope.launch { settingsRepository.setWidgetMargin(value) }
     }
 
+    fun setWidgetRefreshSeconds(value: Int) {
+        viewModelScope.launch { settingsRepository.setWidgetRefreshSeconds(value) }
+    }
+
+    fun setWidgetInertia(value: Int) {
+        viewModelScope.launch { settingsRepository.setWidgetInertia(value) }
+    }
+
+    fun setWidgetMetricPrefix(metric: String, text: String) {
+        viewModelScope.launch {
+            val current = settings.value.widgetMetricPrefixes.toMutableMap()
+            current[metric] = text
+            settingsRepository.setWidgetMetricPrefixes(current)
+        }
+    }
+
     fun setWidgetMode(value: Int) {
         viewModelScope.launch { settingsRepository.setWidgetMode(value) }
     }
