@@ -114,48 +114,64 @@ fun OverviewScreen(viewModel: AppViewModel, modifier: Modifier = Modifier) {
         item {
             val serviceRunning = MonitorService.isRunning
             val guardedCount = settings.appRules.size
-            if (!settings.enabled) {
-                Card(
+            val manual = settings.serviceManual
+            when {
+                !settings.enabled -> Card(
                     colors = CardDefaults.cardColors(
                         containerColor = MaterialTheme.colorScheme.tertiaryContainer
                     ),
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .clickable { viewModel.startGuard() }
+                    modifier = Modifier.fillMaxWidth().clickable { viewModel.startGuard() }
                 ) {
                     Column(Modifier.padding(16.dp)) {
                         Text("守护已关闭", fontWeight = FontWeight.Bold)
                         Text("点击开启守护（含悬浮计时窗）")
                     }
                 }
-            } else if (!serviceRunning) {
-                Card(
-                    colors = CardDefaults.cardColors(
-                        containerColor = MaterialTheme.colorScheme.tertiaryContainer
-                    ),
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .clickable { viewModel.startGuard() }
-                ) {
-                    Column(Modifier.padding(16.dp)) {
-                        Text("守护服务未运行", fontWeight = FontWeight.Bold)
-                        Text("点击启动守护服务（含悬浮计时窗）")
-                    }
-                }
-            } else {
-                Card(
+
+                serviceRunning && guardedCount > 0 -> Card(
                     colors = CardDefaults.cardColors(
                         containerColor = MaterialTheme.colorScheme.primaryContainer
                     )
                 ) {
                     Column(Modifier.padding(16.dp)) {
                         Text("守护运行中 · 守护 " + guardedCount + " 个应用", fontWeight = FontWeight.Bold)
-                        Text(
-                            if (guardedCount == 0)
-                                "尚未添加守护应用，可到“守护清单”添加；悬浮计时窗已就绪"
-                            else
-                                "悬浮计时窗已就绪：拖动换位置，点击切换指标"
-                        )
+                        Text("悬浮计时窗已就绪：拖动换位置，点击切换指标")
+                    }
+                }
+
+                serviceRunning -> Card(
+                    colors = CardDefaults.cardColors(
+                        containerColor = MaterialTheme.colorScheme.primaryContainer
+                    ),
+                    modifier = Modifier.fillMaxWidth().clickable { viewModel.stopGuard() }
+                ) {
+                    Column(Modifier.padding(16.dp)) {
+                        Text("悬浮计时窗运行中（手动）", fontWeight = FontWeight.Bold)
+                        Text("未守护应用，仅提供计时窗；点击停止")
+                    }
+                }
+
+                guardedCount > 0 -> Card(
+                    colors = CardDefaults.cardColors(
+                        containerColor = MaterialTheme.colorScheme.tertiaryContainer
+                    ),
+                    modifier = Modifier.fillMaxWidth().clickable { viewModel.startGuard() }
+                ) {
+                    Column(Modifier.padding(16.dp)) {
+                        Text("守护未运行", fontWeight = FontWeight.Bold)
+                        Text("点击启动守护服务")
+                    }
+                }
+
+                else -> Card(
+                    colors = CardDefaults.cardColors(
+                        containerColor = MaterialTheme.colorScheme.tertiaryContainer
+                    ),
+                    modifier = Modifier.fillMaxWidth().clickable { viewModel.startGuard() }
+                ) {
+                    Column(Modifier.padding(16.dp)) {
+                        Text("守护未运行 · 悬浮计时窗可用", fontWeight = FontWeight.Bold)
+                        Text("点击手动启动（用于只看悬浮计时窗）；若要在所有应用显示，请打开“所有应用都显示”")
                     }
                 }
             }

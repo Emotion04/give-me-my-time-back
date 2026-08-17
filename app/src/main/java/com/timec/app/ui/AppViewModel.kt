@@ -167,6 +167,18 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         viewModelScope.launch { settingsRepository.setWidgetComparePeriod(value) }
     }
 
+    fun setWidgetBackground(value: Int) {
+        viewModelScope.launch { settingsRepository.setWidgetBackground(value) }
+    }
+
+    fun setWidgetTextColor(value: Int) {
+        viewModelScope.launch { settingsRepository.setWidgetTextColor(value) }
+    }
+
+    fun setWidgetMargin(value: Int) {
+        viewModelScope.launch { settingsRepository.setWidgetMargin(value) }
+    }
+
     fun setWidgetMode(value: Int) {
         viewModelScope.launch { settingsRepository.setWidgetMode(value) }
     }
@@ -267,11 +279,19 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
 
     fun startGuard() {
         viewModelScope.launch {
-            if (!settings.value.enabled) {
+            val s = settings.value
+            if (!s.enabled) {
                 settingsRepository.setEnabled(true)
+            }
+            if (s.appRules.isEmpty()) {
+                settingsRepository.setServiceManual(true)
             }
             MonitorService.start(getApplication())
         }
+    }
+
+    fun stopGuard() {
+        viewModelScope.launch { settingsRepository.setServiceManual(false) }
     }
 
     fun ensureWidget() {
@@ -284,7 +304,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     private fun applyServiceState(settings: AppSettings) {
-        if (settings.enabled) {
+        if (settings.enabled && (settings.appRules.isNotEmpty() || settings.serviceManual)) {
             MonitorService.start(getApplication())
         } else {
             MonitorService.stop(getApplication())

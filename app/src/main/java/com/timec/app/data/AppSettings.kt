@@ -14,7 +14,14 @@ data class AppSettings(
     val widgetAllApps: Boolean = false,
     val widgetMetrics: Set<String> = setOf("app_session"),
     val widgetOpacity: Int = 80,
-    val widgetFontSize: Int = 1,
+    // 字号（sp，无极调节）
+    val widgetFontSize: Int = 14,
+    // 背景：0 黑底 1 白底 2 全透明 3 自动对比
+    val widgetBackground: Int = 0,
+    // 文字颜色：0 白 1 黑（透明背景 / 自动无授权时生效）
+    val widgetTextColor: Int = 0,
+    // 文字到背景边沿的边距（dp，四边等宽）
+    val widgetMargin: Int = 10,
     val screenOffResetThresholdSeconds: Int = 30,
     val widgetComparePeriod: Int = 0,
     // 显示方式：0 = 循环切换，1 = 固定单指标
@@ -22,6 +29,8 @@ data class AppSettings(
     val widgetSingleMetric: String = "app_session",
     val widgetPosX: Int = -1,
     val widgetPosY: Int = -1,
+    // 手动运行守护服务（守护清单为空时，用于悬浮计时窗）
+    val serviceManual: Boolean = false,
     val defaultRule: AppRule = AppRule(),
     val appRules: Map<String, AppRule> = emptyMap(),
     val templates: Map<String, AppRule> = emptyMap(),

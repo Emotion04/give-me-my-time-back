@@ -69,7 +69,7 @@ class MonitorService : Service() {
             settingsRepository.settings.collect { settings ->
                 latestSettings = settings
                 MonitorEngine.updateSettings(settings)
-                if (!settings.enabled) {
+                if (!settings.enabled || (settings.appRules.isEmpty() && !settings.serviceManual)) {
                     stopSelf()
                 } else {
                     updateForegroundNotification()
@@ -216,7 +216,11 @@ class MonitorService : Service() {
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
         val count = latestSettings.appRules.size
-        val bodyText = if (count > 0) "正在守护 " + count + " 个应用" else "守护已开启，尚未添加守护应用"
+        val bodyText = when {
+            count > 0 -> "正在守护 " + count + " 个应用"
+            latestSettings.serviceManual -> "悬浮计时窗运行中（未守护应用）"
+            else -> "守护已开启，尚未添加守护应用"
+        }
         return Notification.Builder(this, CHANNEL_MONITOR)
             .setSmallIcon(R.drawable.ic_launcher)
             .setContentTitle("还我时间 · 正在守护")

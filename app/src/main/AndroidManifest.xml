@@ -4,6 +4,7 @@
 
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PROJECTION" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <uses-permission android:name="android.permission.PACKAGE_USAGE_STATS" tools:ignore="ProtectedPermissions" />
     <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
@@ -51,6 +52,15 @@
         <service
             android:name=".monitor.TimerOverlayService"
             android:exported="false" />
+
+        <service
+            android:name=".monitor.ColorSamplerService"
+            android:exported="false"
+            android:foregroundServiceType="mediaProjection">
+            <property
+                android:name="android.app.PROPERTY_MEDIA_PROJECTION"
+                android:value="true" />
+        </service>
 
         <receiver
             android:name=".monitor.MonitorService$WarningActionReceiver"

@@ -24,12 +24,16 @@ class SettingsRepository(private val context: Context) {
         val widgetMetrics = stringSetPreferencesKey("widget_metrics")
         val widgetOpacity = intPreferencesKey("widget_opacity")
         val widgetFontSize = intPreferencesKey("widget_font_size")
+        val widgetBackground = intPreferencesKey("widget_background")
+        val widgetTextColor = intPreferencesKey("widget_text_color")
+        val widgetMargin = intPreferencesKey("widget_margin")
         val screenOffResetThresholdSeconds = intPreferencesKey("screen_off_reset_threshold_seconds")
         val widgetComparePeriod = intPreferencesKey("widget_compare_period")
         val widgetMode = intPreferencesKey("widget_mode")
         val widgetSingleMetric = stringPreferencesKey("widget_single_metric")
         val widgetPosX = intPreferencesKey("widget_pos_x")
         val widgetPosY = intPreferencesKey("widget_pos_y")
+        val serviceManual = booleanPreferencesKey("service_manual")
         val defaultRule = stringPreferencesKey("default_rule")
         val appRules = stringPreferencesKey("app_rules")
         val templates = stringPreferencesKey("templates")
@@ -47,13 +51,24 @@ class SettingsRepository(private val context: Context) {
             widgetAllApps = p[Keys.widgetAllApps] ?: false,
             widgetMetrics = p[Keys.widgetMetrics] ?: setOf("app_session"),
             widgetOpacity = p[Keys.widgetOpacity] ?: 80,
-            widgetFontSize = p[Keys.widgetFontSize] ?: 1,
+            widgetFontSize = (p[Keys.widgetFontSize] ?: 14).let { old ->
+                when (old) {
+                    0 -> 12
+                    1 -> 14
+                    2 -> 18
+                    else -> old.coerceIn(10, 28)
+                }
+            },
+            widgetBackground = p[Keys.widgetBackground] ?: 0,
+            widgetTextColor = p[Keys.widgetTextColor] ?: 0,
+            widgetMargin = p[Keys.widgetMargin] ?: 10,
             screenOffResetThresholdSeconds = p[Keys.screenOffResetThresholdSeconds] ?: 30,
             widgetComparePeriod = p[Keys.widgetComparePeriod] ?: 0,
             widgetMode = p[Keys.widgetMode] ?: 0,
             widgetSingleMetric = p[Keys.widgetSingleMetric] ?: "app_session",
             widgetPosX = p[Keys.widgetPosX] ?: -1,
             widgetPosY = p[Keys.widgetPosY] ?: -1,
+            serviceManual = p[Keys.serviceManual] ?: false,
             defaultRule = p[Keys.defaultRule]?.let(::appRuleFromJson) ?: AppRule(),
             appRules = p[Keys.appRules]?.let(::ruleMapFromJson) ?: emptyMap(),
             templates = p[Keys.templates]?.let(::ruleMapFromJson) ?: emptyMap(),
@@ -94,11 +109,27 @@ class SettingsRepository(private val context: Context) {
     }
 
     suspend fun setWidgetOpacity(value: Int) {
-        context.settingsDataStore.edit { it[Keys.widgetOpacity] = value.coerceIn(20, 100) }
+        context.settingsDataStore.edit { it[Keys.widgetOpacity] = value.coerceIn(2, 100) }
     }
 
     suspend fun setWidgetFontSize(value: Int) {
-        context.settingsDataStore.edit { it[Keys.widgetFontSize] = value.coerceIn(0, 2) }
+        context.settingsDataStore.edit { it[Keys.widgetFontSize] = value.coerceIn(10, 28) }
+    }
+
+    suspend fun setWidgetBackground(value: Int) {
+        context.settingsDataStore.edit { it[Keys.widgetBackground] = value.coerceIn(0, 3) }
+    }
+
+    suspend fun setWidgetTextColor(value: Int) {
+        context.settingsDataStore.edit { it[Keys.widgetTextColor] = value.coerceIn(0, 1) }
+    }
+
+    suspend fun setWidgetMargin(value: Int) {
+        context.settingsDataStore.edit { it[Keys.widgetMargin] = value.coerceIn(0, 24) }
+    }
+
+    suspend fun setServiceManual(value: Boolean) {
+        context.settingsDataStore.edit { it[Keys.serviceManual] = value }
     }
 
     suspend fun setScreenOffResetThresholdSeconds(value: Int) {

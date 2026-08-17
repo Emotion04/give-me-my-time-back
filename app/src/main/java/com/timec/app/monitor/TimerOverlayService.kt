@@ -57,9 +57,13 @@ class TimerOverlayService : Service() {
     private var monthMillis = 0L
     private var cmpValue: Float? = null
     private var lastStatsRefresh = 0L
+    private var params: WindowManager.LayoutParams? = null
+    private var lastAutoColor: Int? = null
+    private var lastAutoSampleAt = 0L
 
     private val tickRunnable = object : Runnable {
         override fun run() {
+            maybeSampleAuto()
             updateText()
             handler.postDelayed(this, 1_000L)
         }
@@ -95,6 +99,7 @@ class TimerOverlayService : Service() {
     override fun onDestroy() {
         handler.removeCallbacks(tickRunnable)
         serviceScope.cancel()
+        ColorSamplerService.stop(this)
         removeOverlay()
         super.onDestroy()
     }
@@ -121,13 +126,14 @@ class TimerOverlayService : Service() {
 
         val tv = TextView(this).apply {
             text = "--:--"
-            textSize = fontFor(settings.widgetFontSize)
-            setTextColor(Color.WHITE)
+            textSize = settings.widgetFontSize.toFloat()
+            setTextColor(currentTextColor())
             gravity = Gravity.CENTER
-            setPadding(dp(12), dp(6), dp(12), dp(6))
+            val m = dp(settings.widgetMargin)
+            setPadding(m, m, m, m)
             background = GradientDrawable().apply {
-                setColor(Color.rgb(30, 30, 36))
-                cornerRadius = dp(16).toFloat()
+                setColor(currentBgColor())
+                cornerRadius = dp(14).toFloat()
             }
             alpha = settings.widgetOpacity / 100f
         }
@@ -177,6 +183,8 @@ class TimerOverlayService : Service() {
                 MotionEvent.ACTION_UP -> {
                     if (moved) {
                         serviceScope.launch { settingsRepository.setWidgetPosition(p.x, p.y) }
+                        lastAutoSampleAt = 0L
+                        maybeSampleAuto()
                     } else if (settings.widgetMode == 0) {
                         cycleMetric()
                     }
@@ -189,6 +197,7 @@ class TimerOverlayService : Service() {
         try {
             windowManager.addView(tv, p)
             textView = tv
+            params = p
             overlayVisible = true
         } catch (_: Exception) {
         }
@@ -196,14 +205,49 @@ class TimerOverlayService : Service() {
 
     private fun applyStyle() {
         val tv = textView ?: return
-        tv.textSize = fontFor(settings.widgetFontSize)
+        tv.textSize = settings.widgetFontSize.toFloat()
         tv.alpha = settings.widgetOpacity / 100f
+        val m = dp(settings.widgetMargin)
+        tv.setPadding(m, m, m, m)
+        (tv.background as? GradientDrawable)?.setColor(currentBgColor())
+        tv.setTextColor(currentTextColor())
+        if (settings.widgetBackground != 3) {
+            ColorSamplerService.stop(this)
+        }
     }
 
-    private fun fontFor(sizeIndex: Int): Float = when (sizeIndex) {
-        0 -> 12f
-        2 -> 18f
-        else -> 14f
+    private fun currentBgColor(): Int = when (settings.widgetBackground) {
+        1 -> Color.WHITE
+        2, 3 -> Color.TRANSPARENT
+        else -> Color.rgb(18, 18, 22)
+    }
+
+    private fun currentTextColor(): Int = when (settings.widgetBackground) {
+        0 -> Color.WHITE
+        1 -> Color.BLACK
+        3 -> lastAutoColor ?: colorForIndex(settings.widgetTextColor)
+        else -> colorForIndex(settings.widgetTextColor)
+    }
+
+    private fun colorForIndex(index: Int): Int = if (index == 1) Color.BLACK else Color.WHITE
+
+    private fun maybeSampleAuto() {
+        if (settings.widgetBackground != 3) return
+        if (!ScreenColorSampler.isActive) return
+        val now = System.currentTimeMillis()
+        if (now - lastAutoSampleAt < 30_000L) return
+        val tv = textView ?: return
+        val lp = params ?: return
+        val w = tv.width.coerceAtLeast(1)
+        val h = tv.height.coerceAtLeast(1)
+        val avg = ScreenColorSampler.sampleAverage(lp.x, lp.y, w, h) ?: return
+        lastAutoSampleAt = now
+        val lum = 0.299f * Color.red(avg) + 0.587f * Color.green(avg) + 0.114f * Color.blue(avg)
+        val color = if (lum > 128f) Color.BLACK else Color.WHITE
+        if (color != lastAutoColor) {
+            lastAutoColor = color
+            tv.setTextColor(color)
+        }
     }
 
     private fun cycleMetric() {
